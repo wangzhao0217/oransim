@@ -197,6 +197,256 @@ top_message_hooks
 verdict
 ```
 
+## Worked example: what this PowerShell request does
+
+This section explains the first request line by line. The full request is:
+
+```powershell
+$body = @{
+  concept_id = "frugal_ev_city_9999"
+  target_market = "UK"
+} | ConvertTo-Json
+
+$result = Invoke-RestMethod `
+  -Uri "http://127.0.0.1:8000/api/frugal-ev/simulate" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
+
+$result
+```
+
+### Step 1: Create the request body
+
+This part:
+
+```powershell
+$body = @{
+  concept_id = "frugal_ev_city_9999"
+  target_market = "UK"
+} | ConvertTo-Json
+```
+
+creates a small JSON message. You can inspect it:
+
+```powershell
+$body
+```
+
+It should look like this:
+
+```json
+{
+  "concept_id": "frugal_ev_city_9999",
+  "target_market": "UK"
+}
+```
+
+The two fields mean:
+
+| Field | Value | Meaning |
+|---|---|---|
+| `concept_id` | `frugal_ev_city_9999` | Use the GBP 9,999 city EV concept |
+| `target_market` | `UK` | Label the report as a UK market simulation |
+
+The `concept_id` must match one of the IDs in:
+
+```text
+data/concepts/frugal_ev_concepts.json
+```
+
+For example, `frugal_ev_city_9999` points to a concept with:
+
+```json
+{
+  "concept_id": "frugal_ev_city_9999",
+  "name": "GBP 9,999 City EV",
+  "price": 9999,
+  "range_km": 180,
+  "battery_warranty_years": 5
+}
+```
+
+### Step 2: Send the request to the API
+
+This part:
+
+```powershell
+$result = Invoke-RestMethod `
+  -Uri "http://127.0.0.1:8000/api/frugal-ev/simulate" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+sends the JSON body to your local Oransim server.
+
+The pieces mean:
+
+| Part | Meaning |
+|---|---|
+| `Invoke-RestMethod` | PowerShell command for calling an HTTP API |
+| `-Uri "http://127.0.0.1:8000/api/frugal-ev/simulate"` | The local endpoint you are calling |
+| `-Method Post` | Send data to the API, rather than just reading a page |
+| `-ContentType "application/json"` | Tell the server the body is JSON |
+| `-Body $body` | Send the JSON created in Step 1 |
+| `$result = ...` | Store the API response in the `$result` variable |
+
+`127.0.0.1` means "this computer". Port `8000` is where Uvicorn is running the
+Oransim API.
+
+### Step 3: What happens inside Oransim
+
+When the request reaches Oransim, the backend follows this path:
+
+```text
+PowerShell request
+  -> backend/oransim/api.py
+  -> backend/oransim/api_routers/frugal_ev.py
+  -> data/concepts/frugal_ev_concepts.json
+  -> data/personas/frugal_ev_personas.json
+  -> backend/oransim/agents/frugal_ev_persona_prompt.py
+  -> LLM provider, or deterministic mock fallback
+  -> backend/oransim/schemas/frugal_ev_opinion.py
+  -> JSON response returned to PowerShell
+```
+
+More concretely:
+
+1. `api.py` has registered the frugal EV router.
+2. `api_routers/frugal_ev.py` receives your request.
+3. It looks up `frugal_ev_city_9999` in the concepts JSON file.
+4. Because you did not specify `segments`, it loads all five default personas:
+   `urban_commuter`, `first_time_car_buyer`, `delivery_driver`,
+   `rural_budget_family`, and `ev_skeptic`.
+5. For each persona, it builds a prompt containing:
+   - the person's segment,
+   - income level,
+   - main need,
+   - concerns,
+   - decision drivers,
+   - EV price,
+   - EV range,
+   - warranty,
+   - features,
+   - marketing message.
+6. If `LLM_MODE=api` and your key is available, it sends that prompt to the
+   configured LLM provider.
+7. If live LLM mode is not available, it uses the deterministic mock fallback.
+8. It validates each persona result with the Pydantic schema.
+9. It computes the overall score, strongest segments, weakest segments,
+   objection themes, message hooks, and verdict.
+
+### Step 4: Print the result
+
+This final line:
+
+```powershell
+$result
+```
+
+prints the response stored in `$result`.
+
+For a live LLM run, you may see output shaped like this:
+
+```text
+concept_name: GBP 9,999 City EV
+target_market: UK
+overall_acceptance_score: 0.700
+strongest_segments: {urban_commuter, first_time_car_buyer}
+weakest_segments: {rural_budget_family, ev_skeptic}
+verdict: Promising for urban_commuter...
+```
+
+The exact values can vary in live LLM mode. Mock mode is deterministic.
+
+### Step 5: Inspect the most important part
+
+The most important part of the result is:
+
+```powershell
+$result.segment_opinions
+```
+
+Each row is one buyer segment's simulated reaction. For example:
+
+```text
+segment: urban_commuter
+purchase_intent_score: 0.70
+trust_score: 0.60
+price_acceptance_score: 0.90
+range_confidence_score: 0.80
+charging_confidence_score: 0.40
+top_positive_reason: Unbeatable price for an EV with very low running costs
+top_objection: No dedicated home charging available
+```
+
+Read this as:
+
+- the city commuter likes the low price,
+- the price is accepted strongly,
+- charging is still the weak point,
+- the next evidence or product feature should address charging access.
+
+### Step 6: Turn the object into a table
+
+PowerShell prints nested JSON objects awkwardly. Use this table command:
+
+```powershell
+$result.segment_opinions |
+  Select-Object segment,
+                purchase_intent_score,
+                trust_score,
+                price_acceptance_score,
+                range_confidence_score,
+                charging_confidence_score,
+                top_objection |
+  Format-Table -Wrap
+```
+
+This gives you a readable segment-by-segment comparison.
+
+### Step 7: Ask "why did the model produce this?"
+
+The result is generated from the combination of **concept attributes** and
+**persona attributes**.
+
+For `frugal_ev_city_9999`, the concept has:
+
+- very low price,
+- short city-car range,
+- five-year battery warranty,
+- compact daily-trip positioning.
+
+For `urban_commuter`, the persona has:
+
+- city use case,
+- short daily trips,
+- concerns about parking and charging,
+- interest in low running cost and compact size.
+
+That is why a typical output may say:
+
+- positive reason: low running cost and city convenience,
+- objection: parking or charging access,
+- likely social comment: "tempting, but where do I charge it?"
+
+The API is not searching the internet and not using real survey data in this
+MVP. It is producing an LLM-based structured simulation from the JSON concept
+and persona definitions.
+
+### Step 8: Save the complete object before interpreting it
+
+Always save the full response before summarizing:
+
+```powershell
+$result | ConvertTo-Json -Depth 10 |
+  Set-Content "frugal_ev_city_9999_result.json" -Encoding UTF8
+```
+
+This protects you from losing details that PowerShell may hide in the default
+screen output.
+
 ## Save the result to a JSON file
 
 Saving the result makes it easier to inspect and compare later.
@@ -513,4 +763,3 @@ Safer wording:
 - "The main simulated blocker is charging access."
 - "The next real-world test should validate whether this objection appears in
   interviews or survey responses."
-
