@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import api_state
 from .api_routers import adapters as adapters_router
 from .api_routers import analysis as analysis_router
+from .api_routers import frugal_ev as frugal_ev_router
 from .api_routers import health as health_router
 from .api_routers import predict as predict_router
 from .api_routers import sandbox as sandbox_router
@@ -112,6 +113,7 @@ app.add_middleware(
 
 app.include_router(adapters_router.router)
 app.include_router(analysis_router.router)
+app.include_router(frugal_ev_router.router)
 app.include_router(health_router.router)
 app.include_router(predict_router.router)
 app.include_router(sandbox_router.router)

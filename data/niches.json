@@ -91,6 +91,27 @@
       "ctr_prior": {"mu": 0.039, "sigma": 0.016, "n": 870},
       "bias_caption": "母婴 育儿 宝宝 辅食",
       "female_ratio": 92
+    },
+    {
+      "key": "frugal_ev",
+      "zh": "低价新能源汽车",
+      "en": "Frugal EV",
+      "synonyms": [
+        "frugal EV",
+        "affordable EV",
+        "budget EV",
+        "low-cost electric car",
+        "entry-level EV",
+        "city EV",
+        "cheap EV",
+        "低价电动车",
+        "入门级新能源汽车",
+        "城市通勤车",
+        "代步车"
+      ],
+      "ctr_prior": {"mu": 0.022, "sigma": 0.011, "n": 500},
+      "bias_caption": "低价 新能源汽车 城市通勤 省钱 续航 充电 安全 代步",
+      "female_ratio": 45
     }
   ]
 }

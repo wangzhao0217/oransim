@@ -1,0 +1,47 @@
+[
+  {
+    "concept_id": "frugal_ev_city_9999",
+    "name": "\u00a39,999 City EV",
+    "price": 9999,
+    "range_km": 180,
+    "battery_warranty_years": 5,
+    "positioning": "Ultra-affordable city commuting EV",
+    "message": "A simple electric car for daily city trips at the price of a used petrol car.",
+    "features": [
+      "compact size",
+      "low running cost",
+      "basic infotainment",
+      "5-year battery warranty"
+    ]
+  },
+  {
+    "concept_id": "frugal_ev_family_14999",
+    "name": "\u00a314,999 Practical Family EV",
+    "price": 14999,
+    "range_km": 260,
+    "battery_warranty_years": 8,
+    "positioning": "Affordable family EV with better range and safety",
+    "message": "A practical electric family car that lowers monthly transport costs.",
+    "features": [
+      "larger boot",
+      "advanced safety package",
+      "home charging support",
+      "8-year battery warranty"
+    ]
+  },
+  {
+    "concept_id": "frugal_ev_subscription",
+    "name": "Battery Subscription EV",
+    "price": 7999,
+    "range_km": 220,
+    "battery_warranty_years": 8,
+    "positioning": "Lower upfront price with monthly battery plan",
+    "message": "Pay less upfront and subscribe to the battery separately.",
+    "features": [
+      "low upfront cost",
+      "battery health guarantee",
+      "monthly plan",
+      "swap or upgrade option"
+    ]
+  }
+]

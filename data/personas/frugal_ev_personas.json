@@ -1,0 +1,42 @@
+[
+  {
+    "segment": "urban_commuter",
+    "description": "Lives in a city and mainly needs a car for short daily trips.",
+    "income_level": "middle",
+    "main_need": "cheap and convenient daily transport",
+    "concerns": ["parking", "charging", "battery life", "resale value"],
+    "decision_drivers": ["low running cost", "compact size", "easy charging"]
+  },
+  {
+    "segment": "first_time_car_buyer",
+    "description": "Young buyer comparing used petrol cars with entry-level EVs.",
+    "income_level": "low_to_middle",
+    "main_need": "first affordable car",
+    "concerns": ["upfront price", "insurance", "battery warranty", "brand trust"],
+    "decision_drivers": ["monthly payment", "safety", "warranty", "low maintenance"]
+  },
+  {
+    "segment": "delivery_driver",
+    "description": "Uses vehicle for work and cares about cost per kilometre.",
+    "income_level": "working",
+    "main_need": "low operating cost and reliability",
+    "concerns": ["range", "charging downtime", "repair cost"],
+    "decision_drivers": ["fuel savings", "fast charging", "durability"]
+  },
+  {
+    "segment": "rural_budget_family",
+    "description": "Family outside a major city with limited public charging access.",
+    "income_level": "middle",
+    "main_need": "reliable low-cost household car",
+    "concerns": ["range anxiety", "charging access", "space", "safety"],
+    "decision_drivers": ["range", "warranty", "dealer network", "boot space"]
+  },
+  {
+    "segment": "ev_skeptic",
+    "description": "Interested in saving money but doubts EV reliability.",
+    "income_level": "middle",
+    "main_need": "proof before switching",
+    "concerns": ["battery degradation", "fire risk", "charging inconvenience", "resale value"],
+    "decision_drivers": ["trusted reviews", "warranty", "real-world owner stories"]
+  }
+]
