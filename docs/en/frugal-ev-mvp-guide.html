@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.32">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>Beginner Guide: Frugal EV Opinion Simulator MVP</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="frugal-ev-mvp-guide_files/libs/clipboard/clipboard.min.js"></script>
+<script src="frugal-ev-mvp-guide_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="frugal-ev-mvp-guide_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="frugal-ev-mvp-guide_files/libs/quarto-html/popper.min.js"></script>
+<script src="frugal-ev-mvp-guide_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="frugal-ev-mvp-guide_files/libs/quarto-html/anchor.min.js"></script>
+<link href="frugal-ev-mvp-guide_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="frugal-ev-mvp-guide_files/libs/quarto-html/quarto-syntax-highlighting-37eea08aefeeee20ff55810ff984fec1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="frugal-ev-mvp-guide_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="frugal-ev-mvp-guide_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="frugal-ev-mvp-guide_files/libs/bootstrap/bootstrap-bb462d781dde1847d9e3ccf7736099dd.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#what-this-guide-is-for" id="toc-what-this-guide-is-for" class="nav-link active" data-scroll-target="#what-this-guide-is-for"><span class="header-section-number">1</span> What this guide is for</a></li>
+  <li><a href="#what-was-added" id="toc-what-was-added" class="nav-link" data-scroll-target="#what-was-added"><span class="header-section-number">2</span> What was added</a></li>
+  <li><a href="#start-in-the-right-folder" id="toc-start-in-the-right-folder" class="nav-link" data-scroll-target="#start-in-the-right-folder"><span class="header-section-number">3</span> Start in the right folder</a></li>
+  <li><a href="#choose-mock-mode-or-live-llm-mode" id="toc-choose-mock-mode-or-live-llm-mode" class="nav-link" data-scroll-target="#choose-mock-mode-or-live-llm-mode"><span class="header-section-number">4</span> Choose mock mode or live LLM mode</a>
+  <ul class="collapse">
+  <li><a href="#option-a-mock-mode" id="toc-option-a-mock-mode" class="nav-link" data-scroll-target="#option-a-mock-mode"><span class="header-section-number">4.1</span> Option A: Mock mode</a></li>
+  <li><a href="#option-b-live-llm-mode" id="toc-option-b-live-llm-mode" class="nav-link" data-scroll-target="#option-b-live-llm-mode"><span class="header-section-number">4.2</span> Option B: Live LLM mode</a></li>
+  </ul></li>
+  <li><a href="#start-the-api-server" id="toc-start-the-api-server" class="nav-link" data-scroll-target="#start-the-api-server"><span class="header-section-number">5</span> Start the API server</a></li>
+  <li><a href="#check-that-the-server-is-alive" id="toc-check-that-the-server-is-alive" class="nav-link" data-scroll-target="#check-that-the-server-is-alive"><span class="header-section-number">6</span> Check that the server is alive</a></li>
+  <li><a href="#run-your-first-frugal-ev-simulation" id="toc-run-your-first-frugal-ev-simulation" class="nav-link" data-scroll-target="#run-your-first-frugal-ev-simulation"><span class="header-section-number">7</span> Run your first frugal EV simulation</a></li>
+  <li><a href="#worked-example-what-this-powershell-request-does" id="toc-worked-example-what-this-powershell-request-does" class="nav-link" data-scroll-target="#worked-example-what-this-powershell-request-does"><span class="header-section-number">8</span> Worked example: what this PowerShell request does</a>
+  <ul class="collapse">
+  <li><a href="#step-1-create-the-request-body" id="toc-step-1-create-the-request-body" class="nav-link" data-scroll-target="#step-1-create-the-request-body"><span class="header-section-number">8.1</span> Step 1: Create the request body</a></li>
+  <li><a href="#step-2-send-the-request-to-the-api" id="toc-step-2-send-the-request-to-the-api" class="nav-link" data-scroll-target="#step-2-send-the-request-to-the-api"><span class="header-section-number">8.2</span> Step 2: Send the request to the API</a></li>
+  <li><a href="#step-3-what-happens-inside-oransim" id="toc-step-3-what-happens-inside-oransim" class="nav-link" data-scroll-target="#step-3-what-happens-inside-oransim"><span class="header-section-number">8.3</span> Step 3: What happens inside Oransim</a></li>
+  <li><a href="#step-4-print-the-result" id="toc-step-4-print-the-result" class="nav-link" data-scroll-target="#step-4-print-the-result"><span class="header-section-number">8.4</span> Step 4: Print the result</a></li>
+  <li><a href="#step-5-inspect-the-most-important-part" id="toc-step-5-inspect-the-most-important-part" class="nav-link" data-scroll-target="#step-5-inspect-the-most-important-part"><span class="header-section-number">8.5</span> Step 5: Inspect the most important part</a></li>
+  <li><a href="#step-6-turn-the-object-into-a-table" id="toc-step-6-turn-the-object-into-a-table" class="nav-link" data-scroll-target="#step-6-turn-the-object-into-a-table"><span class="header-section-number">8.6</span> Step 6: Turn the object into a table</a></li>
+  <li><a href="#step-7-ask-why-did-the-model-produce-this" id="toc-step-7-ask-why-did-the-model-produce-this" class="nav-link" data-scroll-target="#step-7-ask-why-did-the-model-produce-this"><span class="header-section-number">8.7</span> Step 7: Ask “why did the model produce this?”</a></li>
+  <li><a href="#step-8-save-the-complete-object-before-interpreting-it" id="toc-step-8-save-the-complete-object-before-interpreting-it" class="nav-link" data-scroll-target="#step-8-save-the-complete-object-before-interpreting-it"><span class="header-section-number">8.8</span> Step 8: Save the complete object before interpreting it</a></li>
+  </ul></li>
+  <li><a href="#save-the-result-to-a-json-file" id="toc-save-the-result-to-a-json-file" class="nav-link" data-scroll-target="#save-the-result-to-a-json-file"><span class="header-section-number">9</span> Save the result to a JSON file</a></li>
+  <li><a href="#understand-the-response" id="toc-understand-the-response" class="nav-link" data-scroll-target="#understand-the-response"><span class="header-section-number">10</span> Understand the response</a>
+  <ul class="collapse">
+  <li><a href="#top-level-fields" id="toc-top-level-fields" class="nav-link" data-scroll-target="#top-level-fields"><span class="header-section-number">10.1</span> Top-level fields</a></li>
+  <li><a href="#score-fields-inside-each-segment" id="toc-score-fields-inside-each-segment" class="nav-link" data-scroll-target="#score-fields-inside-each-segment"><span class="header-section-number">10.2</span> Score fields inside each segment</a></li>
+  <li><a href="#text-fields-inside-each-segment" id="toc-text-fields-inside-each-segment" class="nav-link" data-scroll-target="#text-fields-inside-each-segment"><span class="header-section-number">10.3</span> Text fields inside each segment</a></li>
+  </ul></li>
+  <li><a href="#inspect-only-the-segment-table" id="toc-inspect-only-the-segment-table" class="nav-link" data-scroll-target="#inspect-only-the-segment-table"><span class="header-section-number">11</span> Inspect only the segment table</a></li>
+  <li><a href="#run-one-segment-only" id="toc-run-one-segment-only" class="nav-link" data-scroll-target="#run-one-segment-only"><span class="header-section-number">12</span> Run one segment only</a></li>
+  <li><a href="#compare-the-three-ev-concepts" id="toc-compare-the-three-ev-concepts" class="nav-link" data-scroll-target="#compare-the-three-ev-concepts"><span class="header-section-number">13</span> Compare the three EV concepts</a></li>
+  <li><a href="#what-a-good-result-looks-like" id="toc-what-a-good-result-looks-like" class="nav-link" data-scroll-target="#what-a-good-result-looks-like"><span class="header-section-number">14</span> What a good result looks like</a></li>
+  <li><a href="#how-to-check-if-live-llm-mode-really-ran" id="toc-how-to-check-if-live-llm-mode-really-ran" class="nav-link" data-scroll-target="#how-to-check-if-live-llm-mode-really-ran"><span class="header-section-number">15</span> How to check if live LLM mode really ran</a></li>
+  <li><a href="#troubleshooting" id="toc-troubleshooting" class="nav-link" data-scroll-target="#troubleshooting"><span class="header-section-number">16</span> Troubleshooting</a>
+  <ul class="collapse">
+  <li><a href="#llm_available-is-false" id="toc-llm_available-is-false" class="nav-link" data-scroll-target="#llm_available-is-false"><span class="header-section-number">16.1</span> <code>llm_available()</code> is false</a></li>
+  <li><a href="#api-call-fails-with-connection-refused-to-127.0.0.19" id="toc-api-call-fails-with-connection-refused-to-127.0.0.19" class="nav-link" data-scroll-target="#api-call-fails-with-connection-refused-to-127.0.0.19"><span class="header-section-number">16.2</span> API call fails with connection refused to <code>127.0.0.1:9</code></a></li>
+  <li><a href="#the-server-starts-slowly" id="toc-the-server-starts-slowly" class="nav-link" data-scroll-target="#the-server-starts-slowly"><span class="header-section-number">16.3</span> The server starts slowly</a></li>
+  <li><a href="#the-terminal-shows-the-pound-sign-strangely" id="toc-the-terminal-shows-the-pound-sign-strangely" class="nav-link" data-scroll-target="#the-terminal-shows-the-pound-sign-strangely"><span class="header-section-number">16.4</span> The terminal shows the pound sign strangely</a></li>
+  <li><a href="#the-result-is-valid-but-looks-too-generic" id="toc-the-result-is-valid-but-looks-too-generic" class="nav-link" data-scroll-target="#the-result-is-valid-but-looks-too-generic"><span class="header-section-number">16.5</span> The result is valid but looks too generic</a></li>
+  <li><a href="#the-live-call-is-expensive-or-slow" id="toc-the-live-call-is-expensive-or-slow" class="nav-link" data-scroll-target="#the-live-call-is-expensive-or-slow"><span class="header-section-number">16.6</span> The live call is expensive or slow</a></li>
+  </ul></li>
+  <li><a href="#developer-checks" id="toc-developer-checks" class="nav-link" data-scroll-target="#developer-checks"><span class="header-section-number">17</span> Developer checks</a></li>
+  <li><a href="#suggested-workflow-for-your-analysis" id="toc-suggested-workflow-for-your-analysis" class="nav-link" data-scroll-target="#suggested-workflow-for-your-analysis"><span class="header-section-number">18</span> Suggested workflow for your analysis</a></li>
+  <li><a href="#what-not-to-claim" id="toc-what-not-to-claim" class="nav-link" data-scroll-target="#what-not-to-claim"><span class="header-section-number">19</span> What not to claim</a></li>
+  </ul>
+</nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Beginner Guide: Frugal EV Opinion Simulator MVP</h1>
+<p class="subtitle lead">How to run the API, test live LLM mode, and read the results</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="what-this-guide-is-for" class="level2" data-number="1">
+<h2 data-number="1" class="anchored" data-anchor-id="what-this-guide-is-for"><span class="header-section-number">1</span> What this guide is for</h2>
+<p>This guide explains how to use the new <strong>Frugal EV Opinion Simulator MVP</strong> in Oransim. It assumes you are a beginner and want step-by-step commands plus a plain-English explanation of the output.</p>
+<p>The simulator answers this question:</p>
+<blockquote class="blockquote">
+<p>If we show a low-cost electric vehicle concept to different buyer segments, what objections, positive hooks, and purchase-intent scores might appear?</p>
+</blockquote>
+<p>It is useful for <strong>early market-entry exploration</strong>. It is not a replacement for real surveys, interviews, field trials, or sales data.</p>
+</section>
+<section id="what-was-added" class="level2" data-number="2">
+<h2 data-number="2" class="anchored" data-anchor-id="what-was-added"><span class="header-section-number">2</span> What was added</h2>
+<p>The MVP added these pieces:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Area</th>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Niche registry</td>
+<td><code>data/niches.json</code></td>
+<td>Adds <code>frugal_ev</code> as a recognized market niche</td>
+</tr>
+<tr class="even">
+<td>Personas</td>
+<td><code>data/personas/frugal_ev_personas.json</code></td>
+<td>Defines five buyer segments</td>
+</tr>
+<tr class="odd">
+<td>Concepts</td>
+<td><code>data/concepts/frugal_ev_concepts.json</code></td>
+<td>Defines three EV offers to test</td>
+</tr>
+<tr class="even">
+<td>Schema</td>
+<td><code>backend/oransim/schemas/frugal_ev_opinion.py</code></td>
+<td>Defines the request and response shape</td>
+</tr>
+<tr class="odd">
+<td>LLM prompt</td>
+<td><code>backend/oransim/agents/frugal_ev_persona_prompt.py</code></td>
+<td>Asks the LLM to simulate one persona reaction</td>
+</tr>
+<tr class="even">
+<td>API router</td>
+<td><code>backend/oransim/api_routers/frugal_ev.py</code></td>
+<td>Adds the simulator endpoint</td>
+</tr>
+<tr class="odd">
+<td>App wiring</td>
+<td><code>backend/oransim/api.py</code></td>
+<td>Registers the new router</td>
+</tr>
+</tbody>
+</table>
+<p>The endpoint is:</p>
+<pre class="text"><code>POST /api/frugal-ev/simulate</code></pre>
+</section>
+<section id="start-in-the-right-folder" class="level2" data-number="3">
+<h2 data-number="3" class="anchored" data-anchor-id="start-in-the-right-folder"><span class="header-section-number">3</span> Start in the right folder</h2>
+<p>Open PowerShell and go to the local Oransim clone:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cd</span> <span class="st">"D:\OneDrive - University of Leeds\EV-Infra\EV_modelling\studies\oransim"</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Check that you are in the right folder:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">Get-ChildItem</span> backend\oransim\api<span class="op">.</span><span class="fu">py</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="fu">Get-ChildItem</span> <span class="kw">data</span>\personas\frugal_ev_personas<span class="op">.</span><span class="fu">json</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="fu">Get-ChildItem</span> <span class="kw">data</span>\concepts\frugal_ev_concepts<span class="op">.</span><span class="fu">json</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>If those three commands show files, you are in the correct place.</p>
+</section>
+<section id="choose-mock-mode-or-live-llm-mode" class="level2" data-number="4">
+<h2 data-number="4" class="anchored" data-anchor-id="choose-mock-mode-or-live-llm-mode"><span class="header-section-number">4</span> Choose mock mode or live LLM mode</h2>
+<p>You can run the simulator in two modes.</p>
+<section id="option-a-mock-mode" class="level3" data-number="4.1">
+<h3 data-number="4.1" class="anchored" data-anchor-id="option-a-mock-mode"><span class="header-section-number">4.1</span> Option A: Mock mode</h3>
+<p>Mock mode does not call an external LLM. It is fast, free, and deterministic. Use it first to make sure the API works.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">PYTHONPATH</span> <span class="op">=</span> <span class="st">"backend"</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">LLM_MODE</span> <span class="op">=</span> <span class="st">"mock"</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">POP_SIZE</span> <span class="op">=</span> <span class="st">"10000"</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">SOUL_POOL_N</span> <span class="op">=</span> <span class="st">"5"</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="option-b-live-llm-mode" class="level3" data-number="4.2">
+<h3 data-number="4.2" class="anchored" data-anchor-id="option-b-live-llm-mode"><span class="header-section-number">4.2</span> Option B: Live LLM mode</h3>
+<p>Live LLM mode calls your configured provider. Use it when you want model-written persona reactions.</p>
+<p>Oransim reads environment variables from the process. It does <strong>not</strong> auto-load <code>.env</code> by itself. If your API key and model are in <code>.env</code>, load them into the current PowerShell session:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">Get-Content</span> <span class="st">".env"</span> <span class="op">|</span> <span class="fu">ForEach-Object</span> <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="va">$line</span> <span class="op">=</span> <span class="va">$_</span><span class="op">.</span><span class="fu">Trim</span><span class="op">()</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">(-not</span> <span class="va">$line</span> <span class="op">-or</span> <span class="va">$line</span><span class="op">.</span><span class="fu">StartsWith</span><span class="op">(</span><span class="st">"#"</span><span class="op">)</span> <span class="op">-or</span> <span class="op">(</span><span class="va">$line</span> <span class="op">-notmatch</span> <span class="st">"="</span><span class="op">))</span> <span class="op">{</span> <span class="cf">return</span> <span class="op">}</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>  <span class="va">$parts</span> <span class="op">=</span> <span class="va">$line</span> <span class="op">-split</span> <span class="st">"="</span><span class="op">,</span> <span class="dv">2</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>  <span class="va">$key</span> <span class="op">=</span> <span class="va">$parts</span><span class="op">[</span><span class="dv">0</span><span class="op">].</span><span class="fu">Trim</span><span class="op">()</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>  <span class="va">$value</span> <span class="op">=</span> <span class="va">$parts</span><span class="op">[</span><span class="dv">1</span><span class="op">].</span><span class="fu">Trim</span><span class="op">()</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="op">((</span><span class="va">$value</span><span class="op">.</span><span class="fu">StartsWith</span><span class="op">(</span><span class="st">'"'</span><span class="op">)</span> <span class="op">-and</span> <span class="va">$value</span><span class="op">.</span><span class="fu">EndsWith</span><span class="op">(</span><span class="st">'"'</span><span class="op">))</span> <span class="op">-or</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>      <span class="op">(</span><span class="va">$value</span><span class="op">.</span><span class="fu">StartsWith</span><span class="op">(</span><span class="st">"'"</span><span class="op">)</span> <span class="op">-and</span> <span class="va">$value</span><span class="op">.</span><span class="fu">EndsWith</span><span class="op">(</span><span class="st">"'"</span><span class="op">)))</span> <span class="op">{</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="va">$value</span> <span class="op">=</span> <span class="va">$value</span><span class="op">.</span><span class="fu">Substring</span><span class="op">(</span><span class="dv">1</span><span class="op">,</span> <span class="va">$value</span><span class="op">.</span><span class="fu">Length</span> <span class="op">-</span> <span class="dv">2</span><span class="op">)</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>  <span class="op">[</span>Environment<span class="op">]::</span>SetEnvironmentVariable<span class="op">(</span><span class="va">$key</span><span class="op">,</span> <span class="va">$value</span><span class="op">,</span> <span class="st">"Process"</span><span class="op">)</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">PYTHONPATH</span> <span class="op">=</span> <span class="st">"backend"</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">LLM_MODE</span> <span class="op">=</span> <span class="st">"api"</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">POP_SIZE</span> <span class="op">=</span> <span class="st">"10000"</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">SOUL_POOL_N</span> <span class="op">=</span> <span class="st">"5"</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>If you previously saw connection errors to <code>127.0.0.1:9</code>, clear dead proxy settings in the same PowerShell session:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">HTTP_PROXY</span> <span class="op">=</span> <span class="st">""</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">HTTPS_PROXY</span> <span class="op">=</span> <span class="st">""</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">ALL_PROXY</span> <span class="op">=</span> <span class="st">""</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">http_proxy</span> <span class="op">=</span> <span class="st">""</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">https_proxy</span> <span class="op">=</span> <span class="st">""</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">all_proxy</span> <span class="op">=</span> <span class="st">""</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Check the LLM configuration without printing your key:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>python <span class="op">-</span>c <span class="st">"from oransim.agents.soul_llm import llm_available, llm_info; info=llm_info(); print({'available': llm_available(), 'mode': info['mode'], 'provider': info['provider'], 'model': info['model'], 'api_key_set': info['api_key_set']})"</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>You want:</p>
+<pre class="text"><code>'available': True
+'mode': 'api'
+'api_key_set': True</code></pre>
+</section>
+</section>
+<section id="start-the-api-server" class="level2" data-number="5">
+<h2 data-number="5" class="anchored" data-anchor-id="start-the-api-server"><span class="header-section-number">5</span> Start the API server</h2>
+<p>Run:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>python <span class="op">-</span>m uvicorn oransim<span class="op">.</span><span class="fu">api</span><span class="op">:</span>app <span class="op">--</span>host <span class="dv">127.0</span><span class="op">.</span><span class="dv">0.1</span> <span class="op">--</span>port <span class="dv">8000</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Leave this PowerShell window open. It is now running the API server.</p>
+<p>Open a second PowerShell window for the API requests.</p>
+</section>
+<section id="check-that-the-server-is-alive" class="level2" data-number="6">
+<h2 data-number="6" class="anchored" data-anchor-id="check-that-the-server-is-alive"><span class="header-section-number">6</span> Check that the server is alive</h2>
+<p>In the second PowerShell window:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">Invoke-RestMethod</span> <span class="op">-</span>Uri <span class="st">"http://127.0.0.1:8000/api/health"</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>The important part is:</p>
+<pre class="text"><code>status : ok</code></pre>
+<p>If this fails, the server is not running or the port is different.</p>
+</section>
+<section id="run-your-first-frugal-ev-simulation" class="level2" data-number="7">
+<h2 data-number="7" class="anchored" data-anchor-id="run-your-first-frugal-ev-simulation"><span class="header-section-number">7</span> Run your first frugal EV simulation</h2>
+<p>This tests the <code>GBP 9,999 City EV</code> concept against all five default personas.</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="va">$body</span> <span class="op">=</span> @<span class="op">{</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  concept_id <span class="op">=</span> <span class="st">"frugal_ev_city_9999"</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  target_market <span class="op">=</span> <span class="st">"UK"</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="op">|</span> <span class="fu">ConvertTo-Json</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="va">$result</span> <span class="op">=</span> <span class="fu">Invoke-RestMethod</span> `</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>  <span class="op">-</span>Uri <span class="st">"http://127.0.0.1:8000/api/frugal-ev/simulate"</span> `</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>  <span class="op">-</span>Method Post `</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>  <span class="op">-</span>ContentType <span class="st">"application/json"</span> `</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>  <span class="op">-</span>Body <span class="va">$body</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a><span class="va">$result</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>You should see fields like:</p>
+<pre class="text"><code>concept_name
+target_market
+overall_acceptance_score
+segment_opinions
+strongest_segments
+weakest_segments
+top_objection_themes
+top_message_hooks
+verdict</code></pre>
+</section>
+<section id="worked-example-what-this-powershell-request-does" class="level2" data-number="8">
+<h2 data-number="8" class="anchored" data-anchor-id="worked-example-what-this-powershell-request-does"><span class="header-section-number">8</span> Worked example: what this PowerShell request does</h2>
+<p>This section explains the first request line by line. The full request is:</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="va">$body</span> <span class="op">=</span> @<span class="op">{</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>  concept_id <span class="op">=</span> <span class="st">"frugal_ev_city_9999"</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>  target_market <span class="op">=</span> <span class="st">"UK"</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="op">|</span> <span class="fu">ConvertTo-Json</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="va">$result</span> <span class="op">=</span> <span class="fu">Invoke-RestMethod</span> `</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>  <span class="op">-</span>Uri <span class="st">"http://127.0.0.1:8000/api/frugal-ev/simulate"</span> `</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>  <span class="op">-</span>Method Post `</span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>  <span class="op">-</span>ContentType <span class="st">"application/json"</span> `</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>  <span class="op">-</span>Body <span class="va">$body</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a><span class="va">$result</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<section id="step-1-create-the-request-body" class="level3" data-number="8.1">
+<h3 data-number="8.1" class="anchored" data-anchor-id="step-1-create-the-request-body"><span class="header-section-number">8.1</span> Step 1: Create the request body</h3>
+<p>This part:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="va">$body</span> <span class="op">=</span> @<span class="op">{</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>  concept_id <span class="op">=</span> <span class="st">"frugal_ev_city_9999"</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>  target_market <span class="op">=</span> <span class="st">"UK"</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="op">|</span> <span class="fu">ConvertTo-Json</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>creates a small JSON message. You can inspect it:</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="va">$body</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>It should look like this:</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode json code-with-copy"><code class="sourceCode json"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">"concept_id"</span><span class="fu">:</span> <span class="st">"frugal_ev_city_9999"</span><span class="fu">,</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">"target_market"</span><span class="fu">:</span> <span class="st">"UK"</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>The two fields mean:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Field</th>
+<th>Value</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>concept_id</code></td>
+<td><code>frugal_ev_city_9999</code></td>
+<td>Use the GBP 9,999 city EV concept</td>
+</tr>
+<tr class="even">
+<td><code>target_market</code></td>
+<td><code>UK</code></td>
+<td>Label the report as a UK market simulation</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>concept_id</code> must match one of the IDs in:</p>
+<pre class="text"><code>data/concepts/frugal_ev_concepts.json</code></pre>
+<p>For example, <code>frugal_ev_city_9999</code> points to a concept with:</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode json code-with-copy"><code class="sourceCode json"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">"concept_id"</span><span class="fu">:</span> <span class="st">"frugal_ev_city_9999"</span><span class="fu">,</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">"name"</span><span class="fu">:</span> <span class="st">"GBP 9,999 City EV"</span><span class="fu">,</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">"price"</span><span class="fu">:</span> <span class="dv">9999</span><span class="fu">,</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">"range_km"</span><span class="fu">:</span> <span class="dv">180</span><span class="fu">,</span></span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">"battery_warranty_years"</span><span class="fu">:</span> <span class="dv">5</span></span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="step-2-send-the-request-to-the-api" class="level3" data-number="8.2">
+<h3 data-number="8.2" class="anchored" data-anchor-id="step-2-send-the-request-to-the-api"><span class="header-section-number">8.2</span> Step 2: Send the request to the API</h3>
+<p>This part:</p>
+<div class="sourceCode" id="cb20"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="va">$result</span> <span class="op">=</span> <span class="fu">Invoke-RestMethod</span> `</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>  <span class="op">-</span>Uri <span class="st">"http://127.0.0.1:8000/api/frugal-ev/simulate"</span> `</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>  <span class="op">-</span>Method Post `</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>  <span class="op">-</span>ContentType <span class="st">"application/json"</span> `</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>  <span class="op">-</span>Body <span class="va">$body</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>sends the JSON body to your local Oransim server.</p>
+<p>The pieces mean:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Part</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>Invoke-RestMethod</code></td>
+<td>PowerShell command for calling an HTTP API</td>
+</tr>
+<tr class="even">
+<td><code>-Uri "http://127.0.0.1:8000/api/frugal-ev/simulate"</code></td>
+<td>The local endpoint you are calling</td>
+</tr>
+<tr class="odd">
+<td><code>-Method Post</code></td>
+<td>Send data to the API, rather than just reading a page</td>
+</tr>
+<tr class="even">
+<td><code>-ContentType "application/json"</code></td>
+<td>Tell the server the body is JSON</td>
+</tr>
+<tr class="odd">
+<td><code>-Body $body</code></td>
+<td>Send the JSON created in Step 1</td>
+</tr>
+<tr class="even">
+<td><code>$result = ...</code></td>
+<td>Store the API response in the <code>$result</code> variable</td>
+</tr>
+</tbody>
+</table>
+<p><code>127.0.0.1</code> means “this computer”. Port <code>8000</code> is where Uvicorn is running the Oransim API.</p>
+</section>
+<section id="step-3-what-happens-inside-oransim" class="level3" data-number="8.3">
+<h3 data-number="8.3" class="anchored" data-anchor-id="step-3-what-happens-inside-oransim"><span class="header-section-number">8.3</span> Step 3: What happens inside Oransim</h3>
+<p>When the request reaches Oransim, the backend follows this path:</p>
+<pre class="text"><code>PowerShell request
+  -&gt; backend/oransim/api.py
+  -&gt; backend/oransim/api_routers/frugal_ev.py
+  -&gt; data/concepts/frugal_ev_concepts.json
+  -&gt; data/personas/frugal_ev_personas.json
+  -&gt; backend/oransim/agents/frugal_ev_persona_prompt.py
+  -&gt; LLM provider, or deterministic mock fallback
+  -&gt; backend/oransim/schemas/frugal_ev_opinion.py
+  -&gt; JSON response returned to PowerShell</code></pre>
+<p>More concretely:</p>
+<ol type="1">
+<li><code>api.py</code> has registered the frugal EV router.</li>
+<li><code>api_routers/frugal_ev.py</code> receives your request.</li>
+<li>It looks up <code>frugal_ev_city_9999</code> in the concepts JSON file.</li>
+<li>Because you did not specify <code>segments</code>, it loads all five default personas: <code>urban_commuter</code>, <code>first_time_car_buyer</code>, <code>delivery_driver</code>, <code>rural_budget_family</code>, and <code>ev_skeptic</code>.</li>
+<li>For each persona, it builds a prompt containing:
+<ul>
+<li>the person’s segment,</li>
+<li>income level,</li>
+<li>main need,</li>
+<li>concerns,</li>
+<li>decision drivers,</li>
+<li>EV price,</li>
+<li>EV range,</li>
+<li>warranty,</li>
+<li>features,</li>
+<li>marketing message.</li>
+</ul></li>
+<li>If <code>LLM_MODE=api</code> and your key is available, it sends that prompt to the configured LLM provider.</li>
+<li>If live LLM mode is not available, it uses the deterministic mock fallback.</li>
+<li>It validates each persona result with the Pydantic schema.</li>
+<li>It computes the overall score, strongest segments, weakest segments, objection themes, message hooks, and verdict.</li>
+</ol>
+</section>
+<section id="step-4-print-the-result" class="level3" data-number="8.4">
+<h3 data-number="8.4" class="anchored" data-anchor-id="step-4-print-the-result"><span class="header-section-number">8.4</span> Step 4: Print the result</h3>
+<p>This final line:</p>
+<div class="sourceCode" id="cb22"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="va">$result</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>prints the response stored in <code>$result</code>.</p>
+<p>For a live LLM run, you may see output shaped like this:</p>
+<pre class="text"><code>concept_name: GBP 9,999 City EV
+target_market: UK
+overall_acceptance_score: 0.700
+strongest_segments: {urban_commuter, first_time_car_buyer}
+weakest_segments: {rural_budget_family, ev_skeptic}
+verdict: Promising for urban_commuter...</code></pre>
+<p>The exact values can vary in live LLM mode. Mock mode is deterministic.</p>
+</section>
+<section id="step-5-inspect-the-most-important-part" class="level3" data-number="8.5">
+<h3 data-number="8.5" class="anchored" data-anchor-id="step-5-inspect-the-most-important-part"><span class="header-section-number">8.5</span> Step 5: Inspect the most important part</h3>
+<p>The most important part of the result is:</p>
+<div class="sourceCode" id="cb24"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="va">$result</span><span class="op">.</span><span class="fu">segment_opinions</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Each row is one buyer segment’s simulated reaction. For example:</p>
+<pre class="text"><code>segment: urban_commuter
+purchase_intent_score: 0.70
+trust_score: 0.60
+price_acceptance_score: 0.90
+range_confidence_score: 0.80
+charging_confidence_score: 0.40
+top_positive_reason: Unbeatable price for an EV with very low running costs
+top_objection: No dedicated home charging available</code></pre>
+<p>Read this as:</p>
+<ul>
+<li>the city commuter likes the low price,</li>
+<li>the price is accepted strongly,</li>
+<li>charging is still the weak point,</li>
+<li>the next evidence or product feature should address charging access.</li>
+</ul>
+</section>
+<section id="step-6-turn-the-object-into-a-table" class="level3" data-number="8.6">
+<h3 data-number="8.6" class="anchored" data-anchor-id="step-6-turn-the-object-into-a-table"><span class="header-section-number">8.6</span> Step 6: Turn the object into a table</h3>
+<p>PowerShell prints nested JSON objects awkwardly. Use this table command:</p>
+<div class="sourceCode" id="cb26"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="va">$result</span><span class="op">.</span><span class="fu">segment_opinions</span> <span class="op">|</span></span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">Select-Object</span> segment<span class="op">,</span></span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a>                purchase_intent_score<span class="op">,</span></span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a>                trust_score<span class="op">,</span></span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>                price_acceptance_score<span class="op">,</span></span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a>                range_confidence_score<span class="op">,</span></span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>                charging_confidence_score<span class="op">,</span></span>
+<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a>                top_objection <span class="op">|</span></span>
+<span id="cb26-9"><a href="#cb26-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">Format-Table</span> <span class="op">-</span>Wrap</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>This gives you a readable segment-by-segment comparison.</p>
+</section>
+<section id="step-7-ask-why-did-the-model-produce-this" class="level3" data-number="8.7">
+<h3 data-number="8.7" class="anchored" data-anchor-id="step-7-ask-why-did-the-model-produce-this"><span class="header-section-number">8.7</span> Step 7: Ask “why did the model produce this?”</h3>
+<p>The result is generated from the combination of <strong>concept attributes</strong> and <strong>persona attributes</strong>.</p>
+<p>For <code>frugal_ev_city_9999</code>, the concept has:</p>
+<ul>
+<li>very low price,</li>
+<li>short city-car range,</li>
+<li>five-year battery warranty,</li>
+<li>compact daily-trip positioning.</li>
+</ul>
+<p>For <code>urban_commuter</code>, the persona has:</p>
+<ul>
+<li>city use case,</li>
+<li>short daily trips,</li>
+<li>concerns about parking and charging,</li>
+<li>interest in low running cost and compact size.</li>
+</ul>
+<p>That is why a typical output may say:</p>
+<ul>
+<li>positive reason: low running cost and city convenience,</li>
+<li>objection: parking or charging access,</li>
+<li>likely social comment: “tempting, but where do I charge it?”</li>
+</ul>
+<p>The API is not searching the internet and not using real survey data in this MVP. It is producing an LLM-based structured simulation from the JSON concept and persona definitions.</p>
+</section>
+<section id="step-8-save-the-complete-object-before-interpreting-it" class="level3" data-number="8.8">
+<h3 data-number="8.8" class="anchored" data-anchor-id="step-8-save-the-complete-object-before-interpreting-it"><span class="header-section-number">8.8</span> Step 8: Save the complete object before interpreting it</h3>
+<p>Always save the full response before summarizing:</p>
+<div class="sourceCode" id="cb27"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="va">$result</span> <span class="op">|</span> <span class="fu">ConvertTo-Json</span> <span class="op">-</span>Depth <span class="dv">10</span> <span class="op">|</span></span>
+<span id="cb27-2"><a href="#cb27-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">Set-Content</span> <span class="st">"frugal_ev_city_9999_result.json"</span> <span class="op">-</span>Encoding UTF8</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>This protects you from losing details that PowerShell may hide in the default screen output.</p>
+</section>
+</section>
+<section id="save-the-result-to-a-json-file" class="level2" data-number="9">
+<h2 data-number="9" class="anchored" data-anchor-id="save-the-result-to-a-json-file"><span class="header-section-number">9</span> Save the result to a JSON file</h2>
+<p>Saving the result makes it easier to inspect and compare later.</p>
+<div class="sourceCode" id="cb28"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="va">$result</span> <span class="op">|</span> <span class="fu">ConvertTo-Json</span> <span class="op">-</span>Depth <span class="dv">10</span> <span class="op">|</span></span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">Set-Content</span> <span class="st">"frugal_ev_city_9999_result.json"</span> <span class="op">-</span>Encoding UTF8</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Open the file:</p>
+<div class="sourceCode" id="cb29"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>notepad frugal_ev_city_9999_result<span class="op">.</span><span class="fu">json</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="understand-the-response" class="level2" data-number="10">
+<h2 data-number="10" class="anchored" data-anchor-id="understand-the-response"><span class="header-section-number">10</span> Understand the response</h2>
+<section id="top-level-fields" class="level3" data-number="10.1">
+<h3 data-number="10.1" class="anchored" data-anchor-id="top-level-fields"><span class="header-section-number">10.1</span> Top-level fields</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Field</th>
+<th>Meaning</th>
+<th>How to read it</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>concept_name</code></td>
+<td>Name of the EV concept tested</td>
+<td>Confirms which offer was simulated</td>
+</tr>
+<tr class="even">
+<td><code>target_market</code></td>
+<td>Market label from your request</td>
+<td>Usually <code>UK</code> unless you changed it</td>
+</tr>
+<tr class="odd">
+<td><code>overall_acceptance_score</code></td>
+<td>Average purchase intent across returned segments</td>
+<td>Higher means stronger simulated demand</td>
+</tr>
+<tr class="even">
+<td><code>segment_opinions</code></td>
+<td>One detailed reaction per buyer segment</td>
+<td>This is the most important section</td>
+</tr>
+<tr class="odd">
+<td><code>strongest_segments</code></td>
+<td>Top two segments by purchase intent</td>
+<td>Best early target segments</td>
+</tr>
+<tr class="even">
+<td><code>weakest_segments</code></td>
+<td>Bottom two segments by purchase intent</td>
+<td>Segments needing product/message changes</td>
+</tr>
+<tr class="odd">
+<td><code>top_objection_themes</code></td>
+<td>Main objections from the personas</td>
+<td>Use these to improve the concept</td>
+</tr>
+<tr class="even">
+<td><code>top_message_hooks</code></td>
+<td>Strongest positive reasons</td>
+<td>Use these in messaging hypotheses</td>
+</tr>
+<tr class="odd">
+<td><code>verdict</code></td>
+<td>Short summary sentence</td>
+<td>Quick headline only; inspect details too</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="score-fields-inside-each-segment" class="level3" data-number="10.2">
+<h3 data-number="10.2" class="anchored" data-anchor-id="score-fields-inside-each-segment"><span class="header-section-number">10.2</span> Score fields inside each segment</h3>
+<p>Each item in <code>segment_opinions</code> has these scores:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 30%">
+<col style="width: 40%">
+<col style="width: 30%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Score</th>
+<th style="text-align: right;">Range</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>purchase_intent_score</code></td>
+<td style="text-align: right;">0 to 1</td>
+<td>How likely this segment is to consider buying</td>
+</tr>
+<tr class="even">
+<td><code>trust_score</code></td>
+<td style="text-align: right;">0 to 1</td>
+<td>How much they trust the offer, brand, or proof</td>
+</tr>
+<tr class="odd">
+<td><code>price_acceptance_score</code></td>
+<td style="text-align: right;">0 to 1</td>
+<td>Whether the price feels acceptable</td>
+</tr>
+<tr class="even">
+<td><code>range_confidence_score</code></td>
+<td style="text-align: right;">0 to 1</td>
+<td>Whether the range feels enough</td>
+</tr>
+<tr class="odd">
+<td><code>charging_confidence_score</code></td>
+<td style="text-align: right;">0 to 1</td>
+<td>Whether charging feels practical</td>
+</tr>
+</tbody>
+</table>
+<p>Simple interpretation:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Score band</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>0.00</code> to <code>0.39</code></td>
+<td>Weak</td>
+</tr>
+<tr class="even">
+<td><code>0.40</code> to <code>0.59</code></td>
+<td>Mixed</td>
+</tr>
+<tr class="odd">
+<td><code>0.60</code> to <code>0.79</code></td>
+<td>Promising</td>
+</tr>
+<tr class="even">
+<td><code>0.80</code> to <code>1.00</code></td>
+<td>Strong</td>
+</tr>
+</tbody>
+</table>
+<p>Do not over-interpret tiny differences. A score of <code>0.62</code> versus <code>0.65</code> is not a meaningful ranking by itself. Look at the reasons and objections.</p>
+</section>
+<section id="text-fields-inside-each-segment" class="level3" data-number="10.3">
+<h3 data-number="10.3" class="anchored" data-anchor-id="text-fields-inside-each-segment"><span class="header-section-number">10.3</span> Text fields inside each segment</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Field</th>
+<th>Meaning</th>
+<th>How to use it</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>top_positive_reason</code></td>
+<td>Best reason this segment likes the concept</td>
+<td>Turn into message hooks</td>
+</tr>
+<tr class="even">
+<td><code>top_objection</code></td>
+<td>Biggest blocker</td>
+<td>Turn into product or evidence requirements</td>
+</tr>
+<tr class="odd">
+<td><code>what_would_change_my_mind</code></td>
+<td>What would make the segment more positive</td>
+<td>Use for follow-up experiments</td>
+</tr>
+<tr class="even">
+<td><code>likely_social_comment</code></td>
+<td>Plausible public comment</td>
+<td>Useful for qualitative interpretation</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="inspect-only-the-segment-table" class="level2" data-number="11">
+<h2 data-number="11" class="anchored" data-anchor-id="inspect-only-the-segment-table"><span class="header-section-number">11</span> Inspect only the segment table</h2>
+<p>PowerShell can show a compact table:</p>
+<div class="sourceCode" id="cb30"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="va">$result</span><span class="op">.</span><span class="fu">segment_opinions</span> <span class="op">|</span></span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">Select-Object</span> segment<span class="op">,</span></span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a>                purchase_intent_score<span class="op">,</span></span>
+<span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a>                trust_score<span class="op">,</span></span>
+<span id="cb30-5"><a href="#cb30-5" aria-hidden="true" tabindex="-1"></a>                price_acceptance_score<span class="op">,</span></span>
+<span id="cb30-6"><a href="#cb30-6" aria-hidden="true" tabindex="-1"></a>                range_confidence_score<span class="op">,</span></span>
+<span id="cb30-7"><a href="#cb30-7" aria-hidden="true" tabindex="-1"></a>                charging_confidence_score <span class="op">|</span></span>
+<span id="cb30-8"><a href="#cb30-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">Format-Table</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>This helps you quickly see which score is driving the result.</p>
+</section>
+<section id="run-one-segment-only" class="level2" data-number="12">
+<h2 data-number="12" class="anchored" data-anchor-id="run-one-segment-only"><span class="header-section-number">12</span> Run one segment only</h2>
+<p>This is cheaper in live LLM mode and easier for debugging.</p>
+<div class="sourceCode" id="cb31"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="va">$body</span> <span class="op">=</span> @<span class="op">{</span></span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a>  concept_id <span class="op">=</span> <span class="st">"frugal_ev_city_9999"</span></span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a>  target_market <span class="op">=</span> <span class="st">"UK"</span></span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>  segments <span class="op">=</span> <span class="op">@(</span><span class="st">"urban_commuter"</span><span class="op">)</span></span>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="op">|</span> <span class="fu">ConvertTo-Json</span></span>
+<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a><span class="fu">Invoke-RestMethod</span> `</span>
+<span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a>  <span class="op">-</span>Uri <span class="st">"http://127.0.0.1:8000/api/frugal-ev/simulate"</span> `</span>
+<span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a>  <span class="op">-</span>Method Post `</span>
+<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a>  <span class="op">-</span>ContentType <span class="st">"application/json"</span> `</span>
+<span id="cb31-11"><a href="#cb31-11" aria-hidden="true" tabindex="-1"></a>  <span class="op">-</span>Body <span class="va">$body</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Available segments:</p>
+<pre class="text"><code>urban_commuter
+first_time_car_buyer
+delivery_driver
+rural_budget_family
+ev_skeptic</code></pre>
+</section>
+<section id="compare-the-three-ev-concepts" class="level2" data-number="13">
+<h2 data-number="13" class="anchored" data-anchor-id="compare-the-three-ev-concepts"><span class="header-section-number">13</span> Compare the three EV concepts</h2>
+<p>The MVP includes three concepts:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th><code>concept_id</code></th>
+<th>Offer</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>frugal_ev_city_9999</code></td>
+<td>GBP 9,999 city EV</td>
+</tr>
+<tr class="even">
+<td><code>frugal_ev_family_14999</code></td>
+<td>GBP 14,999 family EV</td>
+</tr>
+<tr class="odd">
+<td><code>frugal_ev_subscription</code></td>
+<td>Battery subscription EV</td>
+</tr>
+</tbody>
+</table>
+<p>Run all three in mock mode or live mode:</p>
+<div class="sourceCode" id="cb33"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="va">$concepts</span> <span class="op">=</span> <span class="op">@(</span></span>
+<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">"frugal_ev_city_9999"</span><span class="op">,</span></span>
+<span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">"frugal_ev_family_14999"</span><span class="op">,</span></span>
+<span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a>  <span class="st">"frugal_ev_subscription"</span></span>
+<span id="cb33-5"><a href="#cb33-5" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb33-6"><a href="#cb33-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-7"><a href="#cb33-7" aria-hidden="true" tabindex="-1"></a><span class="va">$comparison</span> <span class="op">=</span> <span class="cf">foreach</span> <span class="op">(</span><span class="va">$concept</span> <span class="kw">in</span> <span class="va">$concepts</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb33-8"><a href="#cb33-8" aria-hidden="true" tabindex="-1"></a>  <span class="va">$body</span> <span class="op">=</span> @<span class="op">{</span></span>
+<span id="cb33-9"><a href="#cb33-9" aria-hidden="true" tabindex="-1"></a>    concept_id <span class="op">=</span> <span class="va">$concept</span></span>
+<span id="cb33-10"><a href="#cb33-10" aria-hidden="true" tabindex="-1"></a>    target_market <span class="op">=</span> <span class="st">"UK"</span></span>
+<span id="cb33-11"><a href="#cb33-11" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span> <span class="op">|</span> <span class="fu">ConvertTo-Json</span></span>
+<span id="cb33-12"><a href="#cb33-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-13"><a href="#cb33-13" aria-hidden="true" tabindex="-1"></a>  <span class="va">$r</span> <span class="op">=</span> <span class="fu">Invoke-RestMethod</span> `</span>
+<span id="cb33-14"><a href="#cb33-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">-</span>Uri <span class="st">"http://127.0.0.1:8000/api/frugal-ev/simulate"</span> `</span>
+<span id="cb33-15"><a href="#cb33-15" aria-hidden="true" tabindex="-1"></a>    <span class="op">-</span>Method Post `</span>
+<span id="cb33-16"><a href="#cb33-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">-</span>ContentType <span class="st">"application/json"</span> `</span>
+<span id="cb33-17"><a href="#cb33-17" aria-hidden="true" tabindex="-1"></a>    <span class="op">-</span>Body <span class="va">$body</span></span>
+<span id="cb33-18"><a href="#cb33-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-19"><a href="#cb33-19" aria-hidden="true" tabindex="-1"></a>  <span class="op">[</span>pscustomobject<span class="op">]</span>@<span class="op">{</span></span>
+<span id="cb33-20"><a href="#cb33-20" aria-hidden="true" tabindex="-1"></a>    concept_id <span class="op">=</span> <span class="va">$concept</span></span>
+<span id="cb33-21"><a href="#cb33-21" aria-hidden="true" tabindex="-1"></a>    concept_name <span class="op">=</span> <span class="va">$r</span><span class="op">.</span><span class="fu">concept_name</span></span>
+<span id="cb33-22"><a href="#cb33-22" aria-hidden="true" tabindex="-1"></a>    overall_acceptance_score <span class="op">=</span> <span class="va">$r</span><span class="op">.</span><span class="fu">overall_acceptance_score</span></span>
+<span id="cb33-23"><a href="#cb33-23" aria-hidden="true" tabindex="-1"></a>    strongest_segments <span class="op">=</span> <span class="op">(</span><span class="va">$r</span><span class="op">.</span><span class="fu">strongest_segments</span> <span class="op">-join</span> <span class="st">", "</span><span class="op">)</span></span>
+<span id="cb33-24"><a href="#cb33-24" aria-hidden="true" tabindex="-1"></a>    weakest_segments <span class="op">=</span> <span class="op">(</span><span class="va">$r</span><span class="op">.</span><span class="fu">weakest_segments</span> <span class="op">-join</span> <span class="st">", "</span><span class="op">)</span></span>
+<span id="cb33-25"><a href="#cb33-25" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb33-26"><a href="#cb33-26" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb33-27"><a href="#cb33-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-28"><a href="#cb33-28" aria-hidden="true" tabindex="-1"></a><span class="va">$comparison</span> <span class="op">|</span> <span class="fu">Format-Table</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Save the comparison:</p>
+<div class="sourceCode" id="cb34"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="va">$comparison</span> <span class="op">|</span> <span class="fu">Export-Csv</span> <span class="st">"frugal_ev_concept_comparison.csv"</span> <span class="op">-</span>NoTypeInformation</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</section>
+<section id="what-a-good-result-looks-like" class="level2" data-number="14">
+<h2 data-number="14" class="anchored" data-anchor-id="what-a-good-result-looks-like"><span class="header-section-number">14</span> What a good result looks like</h2>
+<p>A useful result is not just a high score. A useful result has:</p>
+<ol type="1">
+<li>Clear strongest segments.</li>
+<li>Clear weakest segments.</li>
+<li>Objections that make practical sense.</li>
+<li>Message hooks that connect to the concept.</li>
+<li>No missing or empty text fields.</li>
+<li>Scores between <code>0</code> and <code>1</code>.</li>
+</ol>
+<p>For example, if <code>urban_commuter</code> is strong but <code>rural_budget_family</code> is weak, that is plausible for a short-range city EV. It suggests the product may be a city-first offer, not a universal family-car replacement.</p>
+</section>
+<section id="how-to-check-if-live-llm-mode-really-ran" class="level2" data-number="15">
+<h2 data-number="15" class="anchored" data-anchor-id="how-to-check-if-live-llm-mode-really-ran"><span class="header-section-number">15</span> How to check if live LLM mode really ran</h2>
+<p>Live mode should produce more varied, natural language than mock mode.</p>
+<p>Also run:</p>
+<div class="sourceCode" id="cb35"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a>python <span class="op">-</span>c <span class="st">"from oransim.agents.soul_llm import llm_available, llm_info; print(llm_available()); print(llm_info())"</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Expected:</p>
+<pre class="text"><code>True
+{'mode': 'api', ... 'api_key_set': True}</code></pre>
+<p>If <code>llm_available()</code> is <code>False</code>, Oransim will use the deterministic fallback.</p>
+</section>
+<section id="troubleshooting" class="level2" data-number="16">
+<h2 data-number="16" class="anchored" data-anchor-id="troubleshooting"><span class="header-section-number">16</span> Troubleshooting</h2>
+<section id="llm_available-is-false" class="level3" data-number="16.1">
+<h3 data-number="16.1" class="anchored" data-anchor-id="llm_available-is-false"><span class="header-section-number">16.1</span> <code>llm_available()</code> is false</h3>
+<p>Check:</p>
+<div class="sourceCode" id="cb37"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">LLM_MODE</span></span>
+<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">LLM_PROVIDER</span></span>
+<span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">LLM_MODEL</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Do not print your API key. Check only whether it exists:</p>
+<div class="sourceCode" id="cb38"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a><span class="op">[</span><span class="dt">bool</span><span class="op">]</span><span class="va">$env</span><span class="op">:</span><span class="va">LLM_API_KEY</span></span>
+<span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a><span class="op">[</span><span class="dt">bool</span><span class="op">]</span><span class="va">$env</span><span class="op">:</span><span class="va">OPENAI_API_KEY</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>For OpenAI-compatible providers, one of those should be <code>True</code>.</p>
+</section>
+<section id="api-call-fails-with-connection-refused-to-127.0.0.19" class="level3" data-number="16.2">
+<h3 data-number="16.2" class="anchored" data-anchor-id="api-call-fails-with-connection-refused-to-127.0.0.19"><span class="header-section-number">16.2</span> API call fails with connection refused to <code>127.0.0.1:9</code></h3>
+<p>Clear proxy variables:</p>
+<div class="sourceCode" id="cb39"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">HTTP_PROXY</span> <span class="op">=</span> <span class="st">""</span></span>
+<span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">HTTPS_PROXY</span> <span class="op">=</span> <span class="st">""</span></span>
+<span id="cb39-3"><a href="#cb39-3" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">ALL_PROXY</span> <span class="op">=</span> <span class="st">""</span></span>
+<span id="cb39-4"><a href="#cb39-4" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">http_proxy</span> <span class="op">=</span> <span class="st">""</span></span>
+<span id="cb39-5"><a href="#cb39-5" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">https_proxy</span> <span class="op">=</span> <span class="st">""</span></span>
+<span id="cb39-6"><a href="#cb39-6" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">all_proxy</span> <span class="op">=</span> <span class="st">""</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Then restart the server.</p>
+</section>
+<section id="the-server-starts-slowly" class="level3" data-number="16.3">
+<h3 data-number="16.3" class="anchored" data-anchor-id="the-server-starts-slowly"><span class="header-section-number">16.3</span> The server starts slowly</h3>
+<p>Oransim bootstraps a synthetic population and runtime state. For beginner testing, use:</p>
+<div class="sourceCode" id="cb40"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">POP_SIZE</span> <span class="op">=</span> <span class="st">"10000"</span></span>
+<span id="cb40-2"><a href="#cb40-2" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">SOUL_POOL_N</span> <span class="op">=</span> <span class="st">"5"</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>This is much lighter than the default.</p>
+</section>
+<section id="the-terminal-shows-the-pound-sign-strangely" class="level3" data-number="16.4">
+<h3 data-number="16.4" class="anchored" data-anchor-id="the-terminal-shows-the-pound-sign-strangely"><span class="header-section-number">16.4</span> The terminal shows the pound sign strangely</h3>
+<p>On some Windows terminals, the <code>GBP</code> symbol may display with the wrong glyph. The underlying JSON file uses the correct Unicode value. This is a terminal encoding display issue, not a simulator logic issue.</p>
+</section>
+<section id="the-result-is-valid-but-looks-too-generic" class="level3" data-number="16.5">
+<h3 data-number="16.5" class="anchored" data-anchor-id="the-result-is-valid-but-looks-too-generic"><span class="header-section-number">16.5</span> The result is valid but looks too generic</h3>
+<p>Try live LLM mode instead of mock mode. Mock mode is deterministic and designed for testing, not realism.</p>
+</section>
+<section id="the-live-call-is-expensive-or-slow" class="level3" data-number="16.6">
+<h3 data-number="16.6" class="anchored" data-anchor-id="the-live-call-is-expensive-or-slow"><span class="header-section-number">16.6</span> The live call is expensive or slow</h3>
+<p>Start with one segment:</p>
+<div class="sourceCode" id="cb41"><pre class="sourceCode json code-with-copy"><code class="sourceCode json"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb41-2"><a href="#cb41-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">"concept_id"</span><span class="fu">:</span> <span class="st">"frugal_ev_city_9999"</span><span class="fu">,</span></span>
+<span id="cb41-3"><a href="#cb41-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">"target_market"</span><span class="fu">:</span> <span class="st">"UK"</span><span class="fu">,</span></span>
+<span id="cb41-4"><a href="#cb41-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">"segments"</span><span class="fu">:</span> <span class="ot">[</span><span class="st">"urban_commuter"</span><span class="ot">]</span></span>
+<span id="cb41-5"><a href="#cb41-5" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Then run all five segments only when you are satisfied the setup works.</p>
+</section>
+</section>
+<section id="developer-checks" class="level2" data-number="17">
+<h2 data-number="17" class="anchored" data-anchor-id="developer-checks"><span class="header-section-number">17</span> Developer checks</h2>
+<p>Run these after changing the feature:</p>
+<div class="sourceCode" id="cb42"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">PYTHONPATH</span> <span class="op">=</span> <span class="st">"backend"</span></span>
+<span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a><span class="va">$env</span><span class="op">:</span><span class="va">LLM_MODE</span> <span class="op">=</span> <span class="st">"mock"</span></span>
+<span id="cb42-3"><a href="#cb42-3" aria-hidden="true" tabindex="-1"></a>python <span class="op">-</span>m pytest <span class="op">-</span>q tests<span class="op">/</span>test_frugal_ev<span class="op">.</span><span class="fu">py</span></span>
+<span id="cb42-4"><a href="#cb42-4" aria-hidden="true" tabindex="-1"></a>python <span class="op">-</span>m ruff check backend<span class="op">/</span> tests<span class="op">/</span>test_frugal_ev<span class="op">.</span><span class="fu">py</span></span>
+<span id="cb42-5"><a href="#cb42-5" aria-hidden="true" tabindex="-1"></a>python <span class="op">-</span>m black <span class="op">--</span>check backend<span class="op">/</span>oransim<span class="op">/</span>agents<span class="op">/</span>frugal_ev_persona_prompt<span class="op">.</span><span class="fu">py</span> backend<span class="op">/</span>oransim<span class="op">/</span>api_routers<span class="op">/</span>frugal_ev<span class="op">.</span><span class="fu">py</span> backend<span class="op">/</span>oransim<span class="op">/</span>schemas<span class="op">/</span>frugal_ev_opinion<span class="op">.</span><span class="fu">py</span> tests<span class="op">/</span>test_frugal_ev<span class="op">.</span><span class="fu">py</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Expected:</p>
+<pre class="text"><code>4 passed
+All checks passed</code></pre>
+</section>
+<section id="suggested-workflow-for-your-analysis" class="level2" data-number="18">
+<h2 data-number="18" class="anchored" data-anchor-id="suggested-workflow-for-your-analysis"><span class="header-section-number">18</span> Suggested workflow for your analysis</h2>
+<p>Use this order:</p>
+<ol type="1">
+<li>Run mock mode for all three concepts.</li>
+<li>Compare overall scores and strongest/weakest segments.</li>
+<li>Pick the best concept and run live LLM mode for one segment.</li>
+<li>If the live output looks sensible, run live mode for all five segments.</li>
+<li>Save the JSON output for each concept.</li>
+<li>Summarize:
+<ul>
+<li>best concept,</li>
+<li>strongest buyer segment,</li>
+<li>weakest buyer segment,</li>
+<li>top three objections,</li>
+<li>top three message hooks,</li>
+<li>what product change should be tested next.</li>
+</ul></li>
+</ol>
+</section>
+<section id="what-not-to-claim" class="level2" data-number="19">
+<h2 data-number="19" class="anchored" data-anchor-id="what-not-to-claim"><span class="header-section-number">19</span> What not to claim</h2>
+<p>Do not claim:</p>
+<ul>
+<li>“The market will buy this car.”</li>
+<li>“This is survey evidence.”</li>
+<li>“This proves demand.”</li>
+</ul>
+<p>Safer wording:</p>
+<ul>
+<li>“The simulation suggests this concept may be more promising for urban commuters than rural budget families.”</li>
+<li>“The main simulated blocker is charging access.”</li>
+<li>“The next real-world test should validate whether this objection appears in interviews or survey responses.”</li>
+</ul>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

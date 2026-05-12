@@ -1,0 +1,516 @@
+---
+title: "Beginner Guide: Frugal EV Opinion Simulator MVP"
+subtitle: "How to run the API, test live LLM mode, and read the results"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+execute:
+  eval: false
+---
+
+## What this guide is for
+
+This guide explains how to use the new **Frugal EV Opinion Simulator MVP** in
+Oransim. It assumes you are a beginner and want step-by-step commands plus a
+plain-English explanation of the output.
+
+The simulator answers this question:
+
+> If we show a low-cost electric vehicle concept to different buyer segments,
+> what objections, positive hooks, and purchase-intent scores might appear?
+
+It is useful for **early market-entry exploration**. It is not a replacement for
+real surveys, interviews, field trials, or sales data.
+
+## What was added
+
+The MVP added these pieces:
+
+| Area | File | Purpose |
+|---|---|---|
+| Niche registry | `data/niches.json` | Adds `frugal_ev` as a recognized market niche |
+| Personas | `data/personas/frugal_ev_personas.json` | Defines five buyer segments |
+| Concepts | `data/concepts/frugal_ev_concepts.json` | Defines three EV offers to test |
+| Schema | `backend/oransim/schemas/frugal_ev_opinion.py` | Defines the request and response shape |
+| LLM prompt | `backend/oransim/agents/frugal_ev_persona_prompt.py` | Asks the LLM to simulate one persona reaction |
+| API router | `backend/oransim/api_routers/frugal_ev.py` | Adds the simulator endpoint |
+| App wiring | `backend/oransim/api.py` | Registers the new router |
+
+The endpoint is:
+
+```text
+POST /api/frugal-ev/simulate
+```
+
+## Start in the right folder
+
+Open PowerShell and go to the local Oransim clone:
+
+```powershell
+cd "D:\OneDrive - University of Leeds\EV-Infra\EV_modelling\studies\oransim"
+```
+
+Check that you are in the right folder:
+
+```powershell
+Get-ChildItem backend\oransim\api.py
+Get-ChildItem data\personas\frugal_ev_personas.json
+Get-ChildItem data\concepts\frugal_ev_concepts.json
+```
+
+If those three commands show files, you are in the correct place.
+
+## Choose mock mode or live LLM mode
+
+You can run the simulator in two modes.
+
+### Option A: Mock mode
+
+Mock mode does not call an external LLM. It is fast, free, and deterministic.
+Use it first to make sure the API works.
+
+```powershell
+$env:PYTHONPATH = "backend"
+$env:LLM_MODE = "mock"
+$env:POP_SIZE = "10000"
+$env:SOUL_POOL_N = "5"
+```
+
+### Option B: Live LLM mode
+
+Live LLM mode calls your configured provider. Use it when you want model-written
+persona reactions.
+
+Oransim reads environment variables from the process. It does **not** auto-load
+`.env` by itself. If your API key and model are in `.env`, load them into the
+current PowerShell session:
+
+```powershell
+Get-Content ".env" | ForEach-Object {
+  $line = $_.Trim()
+  if (-not $line -or $line.StartsWith("#") -or ($line -notmatch "=")) { return }
+
+  $parts = $line -split "=", 2
+  $key = $parts[0].Trim()
+  $value = $parts[1].Trim()
+
+  if (($value.StartsWith('"') -and $value.EndsWith('"')) -or
+      ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+    $value = $value.Substring(1, $value.Length - 2)
+  }
+
+  [Environment]::SetEnvironmentVariable($key, $value, "Process")
+}
+
+$env:PYTHONPATH = "backend"
+$env:LLM_MODE = "api"
+$env:POP_SIZE = "10000"
+$env:SOUL_POOL_N = "5"
+```
+
+If you previously saw connection errors to `127.0.0.1:9`, clear dead proxy
+settings in the same PowerShell session:
+
+```powershell
+$env:HTTP_PROXY = ""
+$env:HTTPS_PROXY = ""
+$env:ALL_PROXY = ""
+$env:http_proxy = ""
+$env:https_proxy = ""
+$env:all_proxy = ""
+```
+
+Check the LLM configuration without printing your key:
+
+```powershell
+python -c "from oransim.agents.soul_llm import llm_available, llm_info; info=llm_info(); print({'available': llm_available(), 'mode': info['mode'], 'provider': info['provider'], 'model': info['model'], 'api_key_set': info['api_key_set']})"
+```
+
+You want:
+
+```text
+'available': True
+'mode': 'api'
+'api_key_set': True
+```
+
+## Start the API server
+
+Run:
+
+```powershell
+python -m uvicorn oransim.api:app --host 127.0.0.1 --port 8000
+```
+
+Leave this PowerShell window open. It is now running the API server.
+
+Open a second PowerShell window for the API requests.
+
+## Check that the server is alive
+
+In the second PowerShell window:
+
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/health"
+```
+
+The important part is:
+
+```text
+status : ok
+```
+
+If this fails, the server is not running or the port is different.
+
+## Run your first frugal EV simulation
+
+This tests the `GBP 9,999 City EV` concept against all five default personas.
+
+```powershell
+$body = @{
+  concept_id = "frugal_ev_city_9999"
+  target_market = "UK"
+} | ConvertTo-Json
+
+$result = Invoke-RestMethod `
+  -Uri "http://127.0.0.1:8000/api/frugal-ev/simulate" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
+
+$result
+```
+
+You should see fields like:
+
+```text
+concept_name
+target_market
+overall_acceptance_score
+segment_opinions
+strongest_segments
+weakest_segments
+top_objection_themes
+top_message_hooks
+verdict
+```
+
+## Save the result to a JSON file
+
+Saving the result makes it easier to inspect and compare later.
+
+```powershell
+$result | ConvertTo-Json -Depth 10 |
+  Set-Content "frugal_ev_city_9999_result.json" -Encoding UTF8
+```
+
+Open the file:
+
+```powershell
+notepad frugal_ev_city_9999_result.json
+```
+
+## Understand the response
+
+### Top-level fields
+
+| Field | Meaning | How to read it |
+|---|---|---|
+| `concept_name` | Name of the EV concept tested | Confirms which offer was simulated |
+| `target_market` | Market label from your request | Usually `UK` unless you changed it |
+| `overall_acceptance_score` | Average purchase intent across returned segments | Higher means stronger simulated demand |
+| `segment_opinions` | One detailed reaction per buyer segment | This is the most important section |
+| `strongest_segments` | Top two segments by purchase intent | Best early target segments |
+| `weakest_segments` | Bottom two segments by purchase intent | Segments needing product/message changes |
+| `top_objection_themes` | Main objections from the personas | Use these to improve the concept |
+| `top_message_hooks` | Strongest positive reasons | Use these in messaging hypotheses |
+| `verdict` | Short summary sentence | Quick headline only; inspect details too |
+
+### Score fields inside each segment
+
+Each item in `segment_opinions` has these scores:
+
+| Score | Range | Meaning |
+|---|---:|---|
+| `purchase_intent_score` | 0 to 1 | How likely this segment is to consider buying |
+| `trust_score` | 0 to 1 | How much they trust the offer, brand, or proof |
+| `price_acceptance_score` | 0 to 1 | Whether the price feels acceptable |
+| `range_confidence_score` | 0 to 1 | Whether the range feels enough |
+| `charging_confidence_score` | 0 to 1 | Whether charging feels practical |
+
+Simple interpretation:
+
+| Score band | Meaning |
+|---|---|
+| `0.00` to `0.39` | Weak |
+| `0.40` to `0.59` | Mixed |
+| `0.60` to `0.79` | Promising |
+| `0.80` to `1.00` | Strong |
+
+Do not over-interpret tiny differences. A score of `0.62` versus `0.65` is not
+a meaningful ranking by itself. Look at the reasons and objections.
+
+### Text fields inside each segment
+
+| Field | Meaning | How to use it |
+|---|---|---|
+| `top_positive_reason` | Best reason this segment likes the concept | Turn into message hooks |
+| `top_objection` | Biggest blocker | Turn into product or evidence requirements |
+| `what_would_change_my_mind` | What would make the segment more positive | Use for follow-up experiments |
+| `likely_social_comment` | Plausible public comment | Useful for qualitative interpretation |
+
+## Inspect only the segment table
+
+PowerShell can show a compact table:
+
+```powershell
+$result.segment_opinions |
+  Select-Object segment,
+                purchase_intent_score,
+                trust_score,
+                price_acceptance_score,
+                range_confidence_score,
+                charging_confidence_score |
+  Format-Table
+```
+
+This helps you quickly see which score is driving the result.
+
+## Run one segment only
+
+This is cheaper in live LLM mode and easier for debugging.
+
+```powershell
+$body = @{
+  concept_id = "frugal_ev_city_9999"
+  target_market = "UK"
+  segments = @("urban_commuter")
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Uri "http://127.0.0.1:8000/api/frugal-ev/simulate" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+Available segments:
+
+```text
+urban_commuter
+first_time_car_buyer
+delivery_driver
+rural_budget_family
+ev_skeptic
+```
+
+## Compare the three EV concepts
+
+The MVP includes three concepts:
+
+| `concept_id` | Offer |
+|---|---|
+| `frugal_ev_city_9999` | GBP 9,999 city EV |
+| `frugal_ev_family_14999` | GBP 14,999 family EV |
+| `frugal_ev_subscription` | Battery subscription EV |
+
+Run all three in mock mode or live mode:
+
+```powershell
+$concepts = @(
+  "frugal_ev_city_9999",
+  "frugal_ev_family_14999",
+  "frugal_ev_subscription"
+)
+
+$comparison = foreach ($concept in $concepts) {
+  $body = @{
+    concept_id = $concept
+    target_market = "UK"
+  } | ConvertTo-Json
+
+  $r = Invoke-RestMethod `
+    -Uri "http://127.0.0.1:8000/api/frugal-ev/simulate" `
+    -Method Post `
+    -ContentType "application/json" `
+    -Body $body
+
+  [pscustomobject]@{
+    concept_id = $concept
+    concept_name = $r.concept_name
+    overall_acceptance_score = $r.overall_acceptance_score
+    strongest_segments = ($r.strongest_segments -join ", ")
+    weakest_segments = ($r.weakest_segments -join ", ")
+  }
+}
+
+$comparison | Format-Table
+```
+
+Save the comparison:
+
+```powershell
+$comparison | Export-Csv "frugal_ev_concept_comparison.csv" -NoTypeInformation
+```
+
+## What a good result looks like
+
+A useful result is not just a high score. A useful result has:
+
+1. Clear strongest segments.
+2. Clear weakest segments.
+3. Objections that make practical sense.
+4. Message hooks that connect to the concept.
+5. No missing or empty text fields.
+6. Scores between `0` and `1`.
+
+For example, if `urban_commuter` is strong but `rural_budget_family` is weak,
+that is plausible for a short-range city EV. It suggests the product may be a
+city-first offer, not a universal family-car replacement.
+
+## How to check if live LLM mode really ran
+
+Live mode should produce more varied, natural language than mock mode.
+
+Also run:
+
+```powershell
+python -c "from oransim.agents.soul_llm import llm_available, llm_info; print(llm_available()); print(llm_info())"
+```
+
+Expected:
+
+```text
+True
+{'mode': 'api', ... 'api_key_set': True}
+```
+
+If `llm_available()` is `False`, Oransim will use the deterministic fallback.
+
+## Troubleshooting
+
+### `llm_available()` is false
+
+Check:
+
+```powershell
+$env:LLM_MODE
+$env:LLM_PROVIDER
+$env:LLM_MODEL
+```
+
+Do not print your API key. Check only whether it exists:
+
+```powershell
+[bool]$env:LLM_API_KEY
+[bool]$env:OPENAI_API_KEY
+```
+
+For OpenAI-compatible providers, one of those should be `True`.
+
+### API call fails with connection refused to `127.0.0.1:9`
+
+Clear proxy variables:
+
+```powershell
+$env:HTTP_PROXY = ""
+$env:HTTPS_PROXY = ""
+$env:ALL_PROXY = ""
+$env:http_proxy = ""
+$env:https_proxy = ""
+$env:all_proxy = ""
+```
+
+Then restart the server.
+
+### The server starts slowly
+
+Oransim bootstraps a synthetic population and runtime state. For beginner
+testing, use:
+
+```powershell
+$env:POP_SIZE = "10000"
+$env:SOUL_POOL_N = "5"
+```
+
+This is much lighter than the default.
+
+### The terminal shows the pound sign strangely
+
+On some Windows terminals, the `GBP` symbol may display with the wrong glyph.
+The underlying JSON file uses the correct Unicode value. This is a terminal
+encoding display issue, not a simulator logic issue.
+
+### The result is valid but looks too generic
+
+Try live LLM mode instead of mock mode. Mock mode is deterministic and designed
+for testing, not realism.
+
+### The live call is expensive or slow
+
+Start with one segment:
+
+```json
+{
+  "concept_id": "frugal_ev_city_9999",
+  "target_market": "UK",
+  "segments": ["urban_commuter"]
+}
+```
+
+Then run all five segments only when you are satisfied the setup works.
+
+## Developer checks
+
+Run these after changing the feature:
+
+```powershell
+$env:PYTHONPATH = "backend"
+$env:LLM_MODE = "mock"
+python -m pytest -q tests/test_frugal_ev.py
+python -m ruff check backend/ tests/test_frugal_ev.py
+python -m black --check backend/oransim/agents/frugal_ev_persona_prompt.py backend/oransim/api_routers/frugal_ev.py backend/oransim/schemas/frugal_ev_opinion.py tests/test_frugal_ev.py
+```
+
+Expected:
+
+```text
+4 passed
+All checks passed
+```
+
+## Suggested workflow for your analysis
+
+Use this order:
+
+1. Run mock mode for all three concepts.
+2. Compare overall scores and strongest/weakest segments.
+3. Pick the best concept and run live LLM mode for one segment.
+4. If the live output looks sensible, run live mode for all five segments.
+5. Save the JSON output for each concept.
+6. Summarize:
+   - best concept,
+   - strongest buyer segment,
+   - weakest buyer segment,
+   - top three objections,
+   - top three message hooks,
+   - what product change should be tested next.
+
+## What not to claim
+
+Do not claim:
+
+- "The market will buy this car."
+- "This is survey evidence."
+- "This proves demand."
+
+Safer wording:
+
+- "The simulation suggests this concept may be more promising for urban
+  commuters than rural budget families."
+- "The main simulated blocker is charging access."
+- "The next real-world test should validate whether this objection appears in
+  interviews or survey responses."
+
