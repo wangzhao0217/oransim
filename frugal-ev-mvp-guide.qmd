@@ -1,6 +1,6 @@
 ---
-title: "Beginner Guide: Frugal EV Opinion Simulator MVP"
-subtitle: "How to run the API, test live LLM mode, and read the results"
+title: "ZEV-UP Scotland Segment Simulator Guide"
+subtitle: "README, methodology, and step-by-step runbook"
 format:
   html:
     toc: true
@@ -10,172 +10,578 @@ execute:
   eval: false
 ---
 
-## What this guide is for
+## Why This Guide Exists
 
-This guide explains how to use the new **Frugal EV Opinion Simulator MVP** in
-Oransim. It assumes you are a beginner and want step-by-step commands plus a
-plain-English explanation of the output.
+This file is kept at the historical path
+`studies/oransim/frugal-ev-mvp-guide.qmd`, but the current guide is for the
+**ZEV-UP Scotland segment simulator**.
 
-The simulator answers this question:
+The simulator answers this practical question:
 
-> If we show a low-cost electric vehicle concept to different buyer segments,
-> what objections, positive hooks, and purchase-intent scores might appear?
+> How might weighted Scotland household/person segments react to ZEV-UP
+> interventions such as awareness campaigns, price subsidies, and charging
+> support?
 
-It is useful for **early market-entry exploration**. It is not a replacement for
-real surveys, interviews, field trials, or sales data.
+It is a first ZEV-UP slice. It is useful for exploring which demographic and
+household segments may be more responsive to interventions, and for producing
+WP1, WP5, and WP6-facing summaries. It is not survey evidence, not a causal
+impact model, and not a full individual-level synthetic population for every
+person in Scotland.
 
-## What was added
+## What The Simulator Can Do
 
-The MVP added these pieces:
+The current implementation can:
 
-| Area | File | Purpose |
+- compare baseline readiness against post-intervention readiness;
+- evaluate three configured interventions:
+  `awareness_campaign`, `price_subsidy`, and `charging_support`;
+- compare ZEV-UP L7e vehicle concepts defined in
+  `data/zevup/vehicle_concepts.json`;
+- show which age, sex, education, socioeconomic proxy, household, car
+  ownership, and charging-readiness groups produce the largest weighted uplift;
+- estimate how many lower socioeconomic proxy households become feasible after
+  a price subsidy;
+- recommend high-uplift WP6 target segments and message directions;
+- run deterministically without an LLM, in mock LLM mode, or with live DeepSeek;
+- return a structured JSON response from a FastAPI endpoint.
+
+## What It Cannot Do Yet
+
+The current implementation does **not**:
+
+- generate millions of individual synthetic people for Scotland;
+- create observed-person records from census microdata;
+- model direct household income, because income is represented by NS-SeC
+  socioeconomic proxy groups;
+- validate response effects against ZEV-UP field surveys or demo trial data;
+- simulate social media diffusion, platform spread, or peer-to-peer contagion;
+- implement Helsinki, Budapest, Istanbul, or other European markets;
+- prove demand, adoption, or policy impact.
+
+Use the output as a structured scenario analysis layer, not as definitive
+market evidence.
+
+## One-Page Mental Model
+
+The simulator is a pipeline:
+
+| Stage | Purpose | Main input | Main output |
+|---|---|---|---|
+| Static ZEV-UP config | Define market, vehicles, and interventions | `data/zevup/*.json` | typed config objects |
+| Scotland source validation | Check required census and Study 3 files exist | cleaned census CSVs and Study 3 outputs | source path manifest or error |
+| Segment builder | Build weighted Scotland segment cells | census marginals plus household feasibility parquet | segment dataframe |
+| LLM/default effect layer | Estimate intervention effects and messages | selected segments, vehicle concept, interventions, mode | effect values and text reasoning |
+| Comparison engine | Apply intervention effects to all segments | segment dataframe plus effects | readiness uplift and rankings |
+| API route | Expose simulator as HTTP JSON | `ZEVUPCompareRequest` | `ZEVUPCompareResponse` |
+
+The important point: **the same API route is used for no-LLM, mock, and live
+DeepSeek runs**. The difference is the environment mode and, optionally, the
+`use_llm` request flag.
+
+## Fastest Working Path
+
+Use this when you only want to prove that the ZEV-UP simulator runs.
+
+If your prompt looks like this:
+
+```text
+(base) root@...:/workspaces/EV_modelling/studies/oransim#
+```
+
+you are using **Bash**, not PowerShell. Use the Bash commands first. The
+PowerShell examples are for Windows terminals.
+
+Purpose: build a few Scotland weighted segment cells directly from Python.
+
+Input: local census and Study 3 outputs configured for Scotland.
+
+Command for Bash:
+
+```bash
+PYTHONPATH=backend python -c "from oransim.data.zevup_segments import build_scotland_segments; df=build_scotland_segments(year=2025, scenario='neutral_lr_central', max_segments=5); print(df[['segment_id','age_group','socioeconomic_group','household_weight','baseline_feasible_share']].to_string(index=False))"
+```
+
+Command for PowerShell:
+
+```powershell
+$env:PYTHONPATH = "backend"
+python -c "from oransim.data.zevup_segments import build_scotland_segments; df=build_scotland_segments(year=2025, scenario='neutral_lr_central', max_segments=5); print(df[['segment_id','age_group','socioeconomic_group','household_weight','baseline_feasible_share']].to_string(index=False))"
+```
+
+Expected output: five rows with `segment_id`, demographic labels,
+`household_weight`, and `baseline_feasible_share`.
+
+Purpose: run the comparison engine without starting the API server.
+
+Input: the same Scotland segment source data plus the default ZEV-UP vehicle and
+interventions.
+
+Command for Bash:
+
+```bash
+PYTHONPATH=backend ZEVUP_LLM_MODE=mock python -c "from oransim.agents.zevup_compare import compare_scotland_segments; from oransim.schemas.zevup import ZEVUPCompareRequest; r=compare_scotland_segments(ZEVUPCompareRequest(year=2025, segment_limit=5, use_llm=True)); print(r.llm_status, r.baseline_readiness, r.post_intervention_readiness, r.overall_uplift)"
+```
+
+Command for PowerShell:
+
+```powershell
+$env:PYTHONPATH = "backend"
+$env:ZEVUP_LLM_MODE = "mock"
+python -c "from oransim.agents.zevup_compare import compare_scotland_segments; from oransim.schemas.zevup import ZEVUPCompareRequest; r=compare_scotland_segments(ZEVUPCompareRequest(year=2025, segment_limit=5, use_llm=True)); print(r.llm_status, r.baseline_readiness, r.post_intervention_readiness, r.overall_uplift)"
+```
+
+Expected output: four values like:
+
+```text
+mock 0.085259 0.220615 0.135356
+```
+
+Those numbers mean:
+
+- `mock`: the mock LLM path was used;
+- `0.085259`: weighted baseline readiness;
+- `0.220615`: weighted readiness after selected interventions;
+- `0.135356`: net readiness uplift.
+
+## Key Files And Dependencies
+
+| Part | File | Depends on | Purpose | Output |
+|---|---|---|---|---|
+| Market config | `data/zevup/markets.json` | source file paths | Defines supported market, currently Scotland | `ZEVUPMarket` |
+| Vehicle config | `data/zevup/vehicle_concepts.json` | none | Defines ZEV-UP vehicle variants | `ZEVUPVehicleConcept` |
+| Intervention config | `data/zevup/interventions.json` | none | Defines allowed interventions and default effects | `ZEVUPIntervention` |
+| WP map | `data/zevup/wp_output_map.json` | ZEV-UP work packages | Documents WP1/WP5/WP6 output purpose | WP-facing labels |
+| Static loader | `backend/oransim/data/zevup_static.py` | JSON config files | Loads and validates static config | lookup functions |
+| Segment builder | `backend/oransim/data/zevup_segments.py` | census CSVs and parquet outputs | Builds weighted Scotland segment cells | `pandas.DataFrame` |
+| LLM helper | `backend/oransim/agents/zevup_llm.py` | env vars and selected segments | Chooses off/mock/DeepSeek reasoning | `ZEVUPLLMResult` |
+| Compare engine | `backend/oransim/agents/zevup_compare.py` | segment builder, static config, LLM helper | Applies interventions and aggregates results | `ZEVUPCompareResponse` |
+| API router | `backend/oransim/api_routers/zevup.py` | compare engine | Adds the HTTP endpoint | JSON response |
+| API app | `backend/oransim/api.py` | router modules | Registers the ZEV-UP route | FastAPI app |
+| Schemas | `backend/oransim/schemas/zevup.py` | Pydantic | Defines request and response contracts | typed models |
+| Tests | `tests/test_zevup_*.py` | implementation files | Regression checks for static config, segments, LLM, compare, API | pass/fail evidence |
+
+Private helper functions in files like `zevup_segments.py` start with `_`.
+They are useful for understanding methodology, but the stable entry points are:
+
+- `required_scotland_source_paths()`
+- `build_scotland_segments()`
+- `assess_segments()`
+- `compare_scotland_segments()`
+- `POST /api/zevup/scotland/segments/compare`
+
+## Source Data Used
+
+The Scotland market is configured in `data/zevup/markets.json`.
+
+The first implementation expects cleaned census files under:
+
+```text
+data/demographic_data/2022_downloads/2022 match 2011/cleaned
+```
+
+It also expects Study 3 / microsimulation outputs:
+
+```text
+output/microsimulation/household_feasibility.parquet
+output/study3/feasible_market_long.parquet
+output/study3/zevup_t54_penetration.csv
+output/study3/zevup_t55_entry_year.csv
+```
+
+The segment builder currently checks these census tables:
+
+| Census file | Used for |
+|---|---|
+| `UV102b - Age (20) by sex.csv` | age group and sex shares |
+| `UV501b - Highest level of qualification by age (5).csv` | education by age shares |
+| `MV104 - Household composition - households (10) by dependent children in household (4).csv` | household type and dependent children shares |
+| `MV407 - Number of cars or vans by accomodation type - households (3) by household size (4).csv` | required source coverage for household attributes |
+| `MV609 - National Statistics Socio-economic Classification (NS-SeC) (9) by household tenure - People.csv` | required source coverage for socioeconomic and tenure attributes |
+| `UV405 - Car or van availability.csv` | required source coverage for car availability |
+| `outputarea2022_usualresidentpopulation.csv` | required source coverage for 2022 population context |
+
+Some required files are checked for availability before building segments even
+when the first slice does not yet use every column directly. This is intentional
+source-manifest validation.
+
+## Population Methodology
+
+The repo does **not** currently generate a full individual population for
+Scotland.
+
+It builds **census-constrained weighted segment cells**. A segment cell is a
+row such as:
+
+```text
+age_group = 35_to_49
+sex = female
+education_group = degree_or_above
+socioeconomic_group = managerial_professional
+household_type = couple_with_dependent_children
+accommodation = whole_house
+household_size = three_plus
+car_ownership = one
+tenure = owned
+charging_readiness_group = moderate
+household_weight = 1234.5
+baseline_feasible_share = 0.27
+```
+
+That row represents a weighted group of households/persons. It is not one real
+person and not one generated individual.
+
+### How `build_scotland_segments()` Works
+
+`build_scotland_segments(year, scenario, max_segments)` does this:
+
+1. Validates that required Scotland census and Study 3 files exist.
+2. Reads `household_feasibility.parquet`.
+3. Filters rows to the selected `year` and `baseline_scenario`.
+4. Groups household feasibility by:
+   - socioeconomic group,
+   - accommodation,
+   - household size,
+   - car ownership,
+   - tenure,
+   - charging readiness.
+5. Computes `baseline_feasible_share` from weighted household feasibility.
+6. Reads census-derived age, sex, education, household type, and dependent
+   children shares.
+7. Cross-joins household feasibility groups with demographic and household type
+   shares.
+8. Filters impossible household combinations, for example one-person households
+   must have `household_size = one_person`.
+9. Allocates household and person weights across segment cells.
+10. Assigns segment IDs such as `scot_seg_0001`.
+
+The tests check that the full segment table conserves household weight against
+the source household feasibility data. That means the segment rows are weighted
+to the source, but they are still weighted cells, not individual people.
+
+## Intervention Methodology
+
+The allowed interventions are configured in `data/zevup/interventions.json`.
+
+| Intervention | What it means | Main output effect |
 |---|---|---|
-| Niche registry | `data/niches.json` | Adds `frugal_ev` as a recognized market niche |
-| Personas | `data/personas/frugal_ev_personas.json` | Defines five buyer segments |
-| Concepts | `data/concepts/frugal_ev_concepts.json` | Defines three EV offers to test |
-| Schema | `backend/oransim/schemas/frugal_ev_opinion.py` | Defines the request and response shape |
-| LLM prompt | `backend/oransim/agents/frugal_ev_persona_prompt.py` | Asks the LLM to simulate one persona reaction |
-| API router | `backend/oransim/api_routers/frugal_ev.py` | Adds the simulator endpoint |
-| App wiring | `backend/oransim/api.py` | Registers the new router |
+| `awareness_campaign` | Improves awareness and willingness to consider | small readiness uplift |
+| `price_subsidy` | Improves affordability | larger affordability/readiness uplift |
+| `charging_support` | Improves charging confidence/readiness | charging-constrained segment uplift |
+
+The comparison engine applies interventions sequentially. For each segment:
+
+```text
+lift = (1 - current_feasible_share) * intervention_effect
+new_feasible_share = current_feasible_share + lift
+```
+
+This keeps the post-intervention share bounded between 0 and 1. A segment that
+is already highly feasible has less room to improve than a segment with low
+baseline feasibility.
+
+The main aggregate metrics are:
+
+| Metric | Meaning |
+|---|---|
+| `baseline_readiness` | household-weighted mean before interventions |
+| `post_intervention_readiness` | household-weighted mean after interventions |
+| `overall_uplift` | `post_intervention_readiness - baseline_readiness` |
+| `weighted_household_uplift` | segment uplift multiplied by household weight |
+
+## LLM, Mock, And No-LLM Modes
+
+The three modes use the same endpoint and almost the same request. They differ
+in how intervention effects and message recommendations are produced.
+
+| Mode | Env setting | Calls DeepSeek? | Effect source | Best use |
+|---|---|---:|---|---|
+| No LLM | `ZEVUP_LLM_MODE = "off"` | No | fixed defaults from `interventions.json` | reproducible baseline tables |
+| Mock | `ZEVUP_LLM_MODE = "mock"` | No | coded test adjustments | local testing and demos |
+| Live DeepSeek | `ZEVUP_LLM_MODE = "deepseek"` | Yes, if key is set | DeepSeek structured JSON | qualitative reasoning and WP6 messages |
+
+The request also has `use_llm`.
+
+| `use_llm` | Env mode | Result |
+|---:|---|---|
+| `false` | any | forces no-LLM defaults and returns `llm_status = "off"` |
+| `true` | `off` | uses defaults and returns `llm_status = "off"` |
+| `true` | `mock` | uses mock adjustments and returns `llm_status = "mock"` |
+| `true` | `deepseek` with API key | calls DeepSeek and returns `llm_status = "used"` if successful |
+| `true` | `deepseek` without key or failed call | uses defaults and returns `llm_status = "fallback"` |
+
+DeepSeek does not create the Scotland population. It only receives selected
+segment summaries, the vehicle concept, selected interventions, year, and
+scenario. It returns structured effect values, reasoning, WP summaries, caveats,
+and message recommendations.
+
+`segment_limit` has two effects:
+
+- it limits how many top-weighted segments are sent to the LLM helper;
+- it limits how many segment rows are returned in `segment_results`.
+
+Aggregate readiness is still calculated over the full segment table. Segments
+without an LLM-specific effect use the configured default intervention effect.
+
+## API Request And Response
 
 The endpoint is:
 
 ```text
-POST /api/frugal-ev/simulate
+POST /api/zevup/scotland/segments/compare
 ```
 
-## Start in the right folder
+The request schema is `ZEVUPCompareRequest`:
 
-Open PowerShell and go to the local Oransim clone:
+| Field | Example | Purpose |
+|---|---|---|
+| `year` | `2025` | Selects Study 3 / feasibility year |
+| `baseline_scenario` | `neutral_lr_central` | Selects scenario rows from source data |
+| `vehicle_concept_id` | `zevup_l7e_passenger_2_seat` | Selects a ZEV-UP vehicle concept |
+| `interventions` | `["awareness_campaign", "price_subsidy"]` | Selects interventions to apply |
+| `segment_limit` | `20` | Limits LLM input and returned segment detail |
+| `use_llm` | `true` | Allows or blocks LLM/mock/fallback effect layer |
+
+The response schema is `ZEVUPCompareResponse`:
+
+| Field | Meaning | Which question it helps answer |
+|---|---|---|
+| `baseline_readiness` | weighted readiness before intervention | current baseline |
+| `post_intervention_readiness` | weighted readiness after intervention | scenario effect |
+| `overall_uplift` | net readiness change | intervention benefit |
+| `segment_results` | top returned weighted segments | which exact segments matter |
+| `demographic_rankings` | top uplift by age, sex, education, socioeconomic proxy, household, car ownership, charging readiness | which groups react differently |
+| `subsidy_impact_summary` | lower socioeconomic proxy uplift from `price_subsidy` | subsidy effect on lower-income proxy groups |
+| `wp_report` | WP1/WP5/WP6 summary text | project reporting |
+| `llm_status` | `off`, `mock`, `fallback`, or `used` | whether LLM reasoning was used |
+| `caveats` | model limitations | how cautiously to read results |
+| `provenance` | source paths and method label | traceability |
+
+## Step-By-Step Runbook
+
+This guide supports two shells:
+
+- **Bash**: Linux, macOS, WSL, Docker, and this container. Environment variables
+  use `export NAME=value` or `NAME=value command`.
+- **PowerShell**: Windows PowerShell. Environment variables use
+  `$env:NAME = "value"`.
+
+Your current prompt shows Bash, so use the Bash commands.
+
+Bash starting folder:
+
+```bash
+cd /workspaces/EV_modelling/studies/oransim
+```
+
+PowerShell starting folder:
 
 ```powershell
 cd "D:\OneDrive - University of Leeds\EV-Infra\EV_modelling\studies\oransim"
 ```
 
-Check that you are in the right folder:
+If your local path is different, go to your own `studies/oransim` folder.
+
+### Step 1: Confirm You Are In The Oransim Folder
+
+Purpose: make sure Python can see the backend and ZEV-UP data files.
+
+Input: local repository checkout.
+
+Command for Bash:
+
+```bash
+ls backend/oransim/api.py
+ls backend/oransim/data/zevup_segments.py
+ls data/zevup/interventions.json
+```
+
+Command for PowerShell:
 
 ```powershell
 Get-ChildItem backend\oransim\api.py
-Get-ChildItem data\personas\frugal_ev_personas.json
-Get-ChildItem data\concepts\frugal_ev_concepts.json
+Get-ChildItem backend\oransim\data\zevup_segments.py
+Get-ChildItem data\zevup\interventions.json
 ```
 
-If those three commands show files, you are in the correct place.
+Expected output: all three files are shown. If one is missing, you are in the
+wrong folder or the ZEV-UP files are incomplete.
 
-## Choose mock mode or live LLM mode
+### Step 2: Check Required Scotland Source Files
 
-You can run the simulator in two modes.
+Purpose: verify that the census and Study 3 source files required by the segment
+builder are present.
 
-### Option A: Mock mode
+Input: configured paths in `data/zevup/markets.json`.
 
-Mock mode does not call an external LLM. It is fast, free, and deterministic.
-Use it first to make sure the API works.
+Command for Bash:
+
+```bash
+PYTHONPATH=backend python -c "from oransim.data.zevup_segments import required_scotland_source_paths; [print(('OK ' if p.exists() else 'MISS ') + str(p)) for p in required_scotland_source_paths()]"
+```
+
+Command for PowerShell:
 
 ```powershell
 $env:PYTHONPATH = "backend"
-$env:LLM_MODE = "mock"
-$env:POP_SIZE = "10000"
-$env:SOUL_POOL_N = "5"
+python -c "from oransim.data.zevup_segments import required_scotland_source_paths; [print(('OK ' if p.exists() else 'MISS ') + str(p)) for p in required_scotland_source_paths()]"
 ```
 
-### Option B: Live LLM mode
+Expected output: each required path starts with `OK`. If a path starts with
+`MISS`, regenerate or copy the required census cleanup or Study 3 output before
+running the simulator.
 
-Live LLM mode calls your configured provider. Use it when you want model-written
-persona reactions.
+### Step 3: Choose Runtime Mode
 
-Oransim reads environment variables from the process. It does **not** auto-load
-`.env` by itself. If your API key and model are in `.env`, load them into the
-current PowerShell session:
+Purpose: choose how intervention effects and message recommendations are
+generated.
+
+Input: your desired mode.
+
+No-LLM mode for Bash:
+
+```bash
+export PYTHONPATH=backend
+export ZEVUP_LLM_MODE=off
+```
+
+No-LLM mode for PowerShell:
 
 ```powershell
-Get-Content ".env" | ForEach-Object {
-  $line = $_.Trim()
-  if (-not $line -or $line.StartsWith("#") -or ($line -notmatch "=")) { return }
-
-  $parts = $line -split "=", 2
-  $key = $parts[0].Trim()
-  $value = $parts[1].Trim()
-
-  if (($value.StartsWith('"') -and $value.EndsWith('"')) -or
-      ($value.StartsWith("'") -and $value.EndsWith("'"))) {
-    $value = $value.Substring(1, $value.Length - 2)
-  }
-
-  [Environment]::SetEnvironmentVariable($key, $value, "Process")
-}
-
 $env:PYTHONPATH = "backend"
-$env:LLM_MODE = "api"
-$env:POP_SIZE = "10000"
-$env:SOUL_POOL_N = "5"
+$env:ZEVUP_LLM_MODE = "off"
 ```
 
-If you previously saw connection errors to `127.0.0.1:9`, clear dead proxy
-settings in the same PowerShell session:
+Mock mode for Bash:
+
+```bash
+export PYTHONPATH=backend
+export ZEVUP_LLM_MODE=mock
+export DEEPSEEK_MODEL=deepseek-v4-flash
+```
+
+Mock mode for PowerShell:
 
 ```powershell
-$env:HTTP_PROXY = ""
-$env:HTTPS_PROXY = ""
-$env:ALL_PROXY = ""
-$env:http_proxy = ""
-$env:https_proxy = ""
-$env:all_proxy = ""
+$env:PYTHONPATH = "backend"
+$env:ZEVUP_LLM_MODE = "mock"
+$env:DEEPSEEK_MODEL = "deepseek-v4-flash"
 ```
 
-Check the LLM configuration without printing your key:
+Live DeepSeek mode for Bash:
+
+```bash
+export PYTHONPATH=backend
+export ZEVUP_LLM_MODE=deepseek
+export DEEPSEEK_API_KEY="<your DeepSeek API key>"
+export DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+export DEEPSEEK_MODEL=deepseek-v4-flash
+```
+
+Live DeepSeek mode for PowerShell:
 
 ```powershell
-python -c "from oransim.agents.soul_llm import llm_available, llm_info; info=llm_info(); print({'available': llm_available(), 'mode': info['mode'], 'provider': info['provider'], 'model': info['model'], 'api_key_set': info['api_key_set']})"
+$env:PYTHONPATH = "backend"
+$env:ZEVUP_LLM_MODE = "deepseek"
+$env:DEEPSEEK_API_KEY = "<your DeepSeek API key>"
+$env:DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+$env:DEEPSEEK_MODEL = "deepseek-v4-flash"
 ```
 
-You want:
+Expected output: PowerShell prints nothing. The variables are set in the current
+terminal session.
 
-```text
-'available': True
-'mode': 'api'
-'api_key_set': True
+Do not put a real API key in this guide or commit one to the repository. If you
+only need to check whether a key is set, run:
+
+```bash
+test -n "$DEEPSEEK_API_KEY" && echo true || echo false
 ```
 
-## Start the API server
-
-Run:
+PowerShell:
 
 ```powershell
+[bool]$env:DEEPSEEK_API_KEY
+```
+
+### Step 4: Start The API Server
+
+Purpose: start the local FastAPI app that exposes the ZEV-UP endpoint.
+
+Input: current PowerShell session with `PYTHONPATH` set.
+
+Command:
+
+```bash
 python -m uvicorn oransim.api:app --host 127.0.0.1 --port 8000
 ```
 
-Leave this PowerShell window open. It is now running the API server.
+Expected output: uvicorn starts and waits for requests. Leave this terminal
+open. Open a second PowerShell terminal for the API calls.
 
-Open a second PowerShell window for the API requests.
+### Step 5: Check The Server Is Alive
 
-## Check that the server is alive
+Purpose: verify the API server is reachable before running a scenario.
 
-In the second PowerShell window:
+Input: running server from Step 4.
+
+Command for Bash:
+
+```bash
+curl http://127.0.0.1:8000/api/health
+```
+
+Command for PowerShell:
 
 ```powershell
 Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/health"
 ```
 
-The important part is:
+Expected output:
 
 ```text
 status : ok
 ```
 
-If this fails, the server is not running or the port is different.
+If the request fails, the server is not running, the port is different, or a
+proxy setting is interfering.
 
-## Run your first frugal EV simulation
+### Step 6: Run A No-LLM Scenario
 
-This tests the `GBP 9,999 City EV` concept against all five default personas.
+Purpose: get a deterministic baseline result using configured intervention
+defaults.
+
+Input: selected year, scenario, vehicle concept, interventions, and
+`use_llm = $false`.
+
+Command for Bash:
+
+```bash
+curl -s http://127.0.0.1:8000/api/zevup/scotland/segments/compare \
+  -H "Content-Type: application/json" \
+  -d '{
+    "year": 2025,
+    "baseline_scenario": "neutral_lr_central",
+    "vehicle_concept_id": "zevup_l7e_passenger_2_seat",
+    "interventions": ["awareness_campaign", "price_subsidy", "charging_support"],
+    "segment_limit": 20,
+    "use_llm": false
+  }'
+```
+
+Command for PowerShell:
 
 ```powershell
 $body = @{
-  concept_id = "frugal_ev_city_9999"
-  target_market = "UK"
+  year = 2025
+  baseline_scenario = "neutral_lr_central"
+  vehicle_concept_id = "zevup_l7e_passenger_2_seat"
+  interventions = @("awareness_campaign", "price_subsidy", "charging_support")
+  segment_limit = 20
+  use_llm = $false
 } | ConvertTo-Json
 
 $result = Invoke-RestMethod `
-  -Uri "http://127.0.0.1:8000/api/frugal-ev/simulate" `
+  -Uri "http://127.0.0.1:8000/api/zevup/scotland/segments/compare" `
   -Method Post `
   -ContentType "application/json" `
   -Body $body
@@ -183,236 +589,294 @@ $result = Invoke-RestMethod `
 $result
 ```
 
-You should see fields like:
+Expected output: JSON with `llm_status` equal to `off`.
 
-```text
-concept_name
-target_market
-overall_acceptance_score
-segment_opinions
-strongest_segments
-weakest_segments
-top_objection_themes
-top_message_hooks
-verdict
+### Step 7: Run The Same Scenario With Mock Or DeepSeek
+
+Purpose: compare how the qualitative effect layer changes effects, messages,
+and WP summaries.
+
+Input: same request as Step 6, but set `use_llm = $true`. The actual behavior
+depends on `ZEVUP_LLM_MODE`.
+
+Command for Bash:
+
+```bash
+curl -s http://127.0.0.1:8000/api/zevup/scotland/segments/compare \
+  -H "Content-Type: application/json" \
+  -d '{
+    "year": 2025,
+    "baseline_scenario": "neutral_lr_central",
+    "vehicle_concept_id": "zevup_l7e_passenger_2_seat",
+    "interventions": ["awareness_campaign", "price_subsidy", "charging_support"],
+    "segment_limit": 20,
+    "use_llm": true
+  }'
 ```
 
-## Save the result to a JSON file
-
-Saving the result makes it easier to inspect and compare later.
-
-```powershell
-$result | ConvertTo-Json -Depth 10 |
-  Set-Content "frugal_ev_city_9999_result.json" -Encoding UTF8
-```
-
-Open the file:
-
-```powershell
-notepad frugal_ev_city_9999_result.json
-```
-
-## Understand the response
-
-### Top-level fields
-
-| Field | Meaning | How to read it |
-|---|---|---|
-| `concept_name` | Name of the EV concept tested | Confirms which offer was simulated |
-| `target_market` | Market label from your request | Usually `UK` unless you changed it |
-| `overall_acceptance_score` | Average purchase intent across returned segments | Higher means stronger simulated demand |
-| `segment_opinions` | One detailed reaction per buyer segment | This is the most important section |
-| `strongest_segments` | Top two segments by purchase intent | Best early target segments |
-| `weakest_segments` | Bottom two segments by purchase intent | Segments needing product/message changes |
-| `top_objection_themes` | Main objections from the personas | Use these to improve the concept |
-| `top_message_hooks` | Strongest positive reasons | Use these in messaging hypotheses |
-| `verdict` | Short summary sentence | Quick headline only; inspect details too |
-
-### Score fields inside each segment
-
-Each item in `segment_opinions` has these scores:
-
-| Score | Range | Meaning |
-|---|---:|---|
-| `purchase_intent_score` | 0 to 1 | How likely this segment is to consider buying |
-| `trust_score` | 0 to 1 | How much they trust the offer, brand, or proof |
-| `price_acceptance_score` | 0 to 1 | Whether the price feels acceptable |
-| `range_confidence_score` | 0 to 1 | Whether the range feels enough |
-| `charging_confidence_score` | 0 to 1 | Whether charging feels practical |
-
-Simple interpretation:
-
-| Score band | Meaning |
-|---|---|
-| `0.00` to `0.39` | Weak |
-| `0.40` to `0.59` | Mixed |
-| `0.60` to `0.79` | Promising |
-| `0.80` to `1.00` | Strong |
-
-Do not over-interpret tiny differences. A score of `0.62` versus `0.65` is not
-a meaningful ranking by itself. Look at the reasons and objections.
-
-### Text fields inside each segment
-
-| Field | Meaning | How to use it |
-|---|---|---|
-| `top_positive_reason` | Best reason this segment likes the concept | Turn into message hooks |
-| `top_objection` | Biggest blocker | Turn into product or evidence requirements |
-| `what_would_change_my_mind` | What would make the segment more positive | Use for follow-up experiments |
-| `likely_social_comment` | Plausible public comment | Useful for qualitative interpretation |
-
-## Inspect only the segment table
-
-PowerShell can show a compact table:
-
-```powershell
-$result.segment_opinions |
-  Select-Object segment,
-                purchase_intent_score,
-                trust_score,
-                price_acceptance_score,
-                range_confidence_score,
-                charging_confidence_score |
-  Format-Table
-```
-
-This helps you quickly see which score is driving the result.
-
-## Run one segment only
-
-This is cheaper in live LLM mode and easier for debugging.
+Command for PowerShell:
 
 ```powershell
 $body = @{
-  concept_id = "frugal_ev_city_9999"
-  target_market = "UK"
-  segments = @("urban_commuter")
+  year = 2025
+  baseline_scenario = "neutral_lr_central"
+  vehicle_concept_id = "zevup_l7e_passenger_2_seat"
+  interventions = @("awareness_campaign", "price_subsidy", "charging_support")
+  segment_limit = 20
+  use_llm = $true
 } | ConvertTo-Json
 
-Invoke-RestMethod `
-  -Uri "http://127.0.0.1:8000/api/frugal-ev/simulate" `
+$result = Invoke-RestMethod `
+  -Uri "http://127.0.0.1:8000/api/zevup/scotland/segments/compare" `
   -Method Post `
   -ContentType "application/json" `
   -Body $body
+
+$result.llm_status
+$result.baseline_readiness
+$result.post_intervention_readiness
+$result.overall_uplift
 ```
 
-Available segments:
+Expected output:
 
-```text
-urban_commuter
-first_time_car_buyer
-delivery_driver
-rural_budget_family
-ev_skeptic
+- `mock` if `ZEVUP_LLM_MODE = "mock"`;
+- `used` if `ZEVUP_LLM_MODE = "deepseek"` and the call succeeds;
+- `fallback` if DeepSeek mode is selected but the key/call fails;
+- `off` if `ZEVUP_LLM_MODE = "off"`.
+
+The endpoint and request shape are the same. The main difference is the effect
+source used inside `zevup_llm.py`.
+
+### Step 8: Inspect Which Groups Changed Most
+
+Purpose: answer "How do age, education, household, and socioeconomic groups
+react differently?"
+
+Input: `$result` from Step 6 or Step 7.
+
+Command:
+
+```powershell
+$result.demographic_rankings.age_group | Format-Table
+$result.demographic_rankings.education_group | Format-Table
+$result.demographic_rankings.socioeconomic_group | Format-Table
+$result.demographic_rankings.household_type | Format-Table
 ```
 
-## Compare the three EV concepts
+Expected output: ranked tables with `value`, `weighted_household_uplift`, and
+`household_weight`.
 
-The MVP includes three concepts:
+Read these as "which weighted group contributes most to total uplift", not as
+individual survey responses.
 
-| `concept_id` | Offer |
+### Step 9: Inspect Price Subsidy Impact
+
+Purpose: answer "How many lower-income proxy households become feasible after a
+subsidy?"
+
+Input: a result where `price_subsidy` was included.
+
+Command:
+
+```powershell
+$result.subsidy_impact_summary
+```
+
+Expected output: a summary with:
+
+- `group_definition`;
+- `weighted_households_made_feasible_proxy`;
+- `note`.
+
+This is a lower socioeconomic proxy result. It is not direct income modelling.
+
+### Step 10: Inspect WP6 Target Messages
+
+Purpose: answer "Which exact segments should WP6 target with different
+messages?"
+
+Input: `$result.segment_results`.
+
+Command:
+
+```powershell
+$result.segment_results |
+  Select-Object segment_id,
+                age_group,
+                socioeconomic_group,
+                household_type,
+                charging_readiness_group,
+                top_intervention,
+                message_recommendation,
+                weighted_household_uplift |
+  Format-Table -Wrap
+```
+
+Expected output: top returned segments and their recommended message direction.
+In no-LLM mode, messages come from configured intervention descriptions. In mock
+or DeepSeek mode, messages come from the LLM helper layer.
+
+### Step 11: Save A Result
+
+Purpose: keep a reproducible record for reporting or comparison.
+
+Input: `$result` from a completed run.
+
+Command for Bash:
+
+```bash
+curl -s http://127.0.0.1:8000/api/zevup/scotland/segments/compare \
+  -H "Content-Type: application/json" \
+  -d '{
+    "year": 2025,
+    "baseline_scenario": "neutral_lr_central",
+    "vehicle_concept_id": "zevup_l7e_passenger_2_seat",
+    "interventions": ["awareness_campaign", "price_subsidy", "charging_support"],
+    "segment_limit": 20,
+    "use_llm": true
+  }' > zevup_scotland_compare_result.json
+```
+
+Command for PowerShell:
+
+```powershell
+$result | ConvertTo-Json -Depth 20 |
+  Set-Content "zevup_scotland_compare_result.json" -Encoding UTF8
+```
+
+Expected output: a local JSON file named
+`zevup_scotland_compare_result.json`.
+
+## Direct Python Checks Without Starting The Server
+
+You can test the core Python path directly.
+
+Purpose: verify segment building.
+
+Command for Bash:
+
+```bash
+PYTHONPATH=backend python -c "from oransim.data.zevup_segments import build_scotland_segments; df=build_scotland_segments(year=2025, scenario='neutral_lr_central', max_segments=5); print(df[['segment_id','age_group','socioeconomic_group','household_weight','baseline_feasible_share']].to_string(index=False))"
+```
+
+Command for PowerShell:
+
+```powershell
+$env:PYTHONPATH = "backend"
+python -c "from oransim.data.zevup_segments import build_scotland_segments; df=build_scotland_segments(year=2025, scenario='neutral_lr_central', max_segments=5); print(df[['segment_id','age_group','socioeconomic_group','household_weight','baseline_feasible_share']].to_string(index=False))"
+```
+
+Purpose: verify comparison without HTTP.
+
+Command for Bash:
+
+```bash
+PYTHONPATH=backend ZEVUP_LLM_MODE=mock python -c "from oransim.agents.zevup_compare import compare_scotland_segments; from oransim.schemas.zevup import ZEVUPCompareRequest; r=compare_scotland_segments(ZEVUPCompareRequest(year=2025, segment_limit=5, use_llm=True)); print(r.llm_status, r.baseline_readiness, r.post_intervention_readiness, r.overall_uplift)"
+```
+
+Command for PowerShell:
+
+```powershell
+$env:PYTHONPATH = "backend"
+$env:ZEVUP_LLM_MODE = "mock"
+python -c "from oransim.agents.zevup_compare import compare_scotland_segments; from oransim.schemas.zevup import ZEVUPCompareRequest; r=compare_scotland_segments(ZEVUPCompareRequest(year=2025, segment_limit=5, use_llm=True)); print(r.llm_status, r.baseline_readiness, r.post_intervention_readiness, r.overall_uplift)"
+```
+
+These commands use the same core implementation as the API route.
+
+## Developer Verification
+
+Run these after changing ZEV-UP simulator code or this guide's assumptions:
+
+Command for Bash:
+
+```bash
+PYTHONPATH=backend ZEVUP_LLM_MODE=mock python -m pytest -q tests/test_zevup_static.py tests/test_zevup_segments.py tests/test_zevup_llm.py tests/test_zevup_compare.py
+PYTHONPATH=backend ZEVUP_LLM_MODE=mock python -m py_compile backend/oransim/api.py backend/oransim/api_routers/zevup.py tests/test_zevup_api.py
+```
+
+Command for PowerShell:
+
+```powershell
+$env:PYTHONPATH = "backend"
+$env:ZEVUP_LLM_MODE = "mock"
+python -m pytest -q tests/test_zevup_static.py tests/test_zevup_segments.py tests/test_zevup_llm.py tests/test_zevup_compare.py
+python -m py_compile backend/oransim/api.py backend/oransim/api_routers/zevup.py tests/test_zevup_api.py
+```
+
+If `fastapi` is installed in your active environment, also run:
+
+```bash
+PYTHONPATH=backend python -m pytest -q tests/test_zevup_api.py
+```
+
+PowerShell:
+
+```powershell
+python -m pytest -q tests/test_zevup_api.py
+```
+
+## How To Interpret Results
+
+Use the output to support these questions:
+
+| Question | Response field |
 |---|---|
-| `frugal_ev_city_9999` | GBP 9,999 city EV |
-| `frugal_ev_family_14999` | GBP 14,999 family EV |
-| `frugal_ev_subscription` | Battery subscription EV |
+| How do different demographic groups react differently? | `demographic_rankings` |
+| Which group changes most after awareness campaign? | run with `interventions = @("awareness_campaign")`, then inspect `demographic_rankings` |
+| How many lower-income proxy households become feasible after subsidy? | `subsidy_impact_summary.weighted_households_made_feasible_proxy` |
+| Which segments should WP6 target? | `segment_results` sorted by `weighted_household_uplift` |
+| How do qualitative reactions aggregate into uptake? | LLM/default effects become segment lifts; lifts are multiplied by household weights and aggregated |
+| Did the run really use DeepSeek? | `llm_status` |
 
-Run all three in mock mode or live mode:
+Be careful with wording:
 
-```powershell
-$concepts = @(
-  "frugal_ev_city_9999",
-  "frugal_ev_family_14999",
-  "frugal_ev_subscription"
-)
-
-$comparison = foreach ($concept in $concepts) {
-  $body = @{
-    concept_id = $concept
-    target_market = "UK"
-  } | ConvertTo-Json
-
-  $r = Invoke-RestMethod `
-    -Uri "http://127.0.0.1:8000/api/frugal-ev/simulate" `
-    -Method Post `
-    -ContentType "application/json" `
-    -Body $body
-
-  [pscustomobject]@{
-    concept_id = $concept
-    concept_name = $r.concept_name
-    overall_acceptance_score = $r.overall_acceptance_score
-    strongest_segments = ($r.strongest_segments -join ", ")
-    weakest_segments = ($r.weakest_segments -join ", ")
-  }
-}
-
-$comparison | Format-Table
-```
-
-Save the comparison:
-
-```powershell
-$comparison | Export-Csv "frugal_ev_concept_comparison.csv" -NoTypeInformation
-```
-
-## What a good result looks like
-
-A useful result is not just a high score. A useful result has:
-
-1. Clear strongest segments.
-2. Clear weakest segments.
-3. Objections that make practical sense.
-4. Message hooks that connect to the concept.
-5. No missing or empty text fields.
-6. Scores between `0` and `1`.
-
-For example, if `urban_commuter` is strong but `rural_budget_family` is weak,
-that is plausible for a short-range city EV. It suggests the product may be a
-city-first offer, not a universal family-car replacement.
-
-## How to check if live LLM mode really ran
-
-Live mode should produce more varied, natural language than mock mode.
-
-Also run:
-
-```powershell
-python -c "from oransim.agents.soul_llm import llm_available, llm_info; print(llm_available()); print(llm_info())"
-```
-
-Expected:
-
-```text
-True
-{'mode': 'api', ... 'api_key_set': True}
-```
-
-If `llm_available()` is `False`, Oransim will use the deterministic fallback.
+- Say "weighted segment cells", not "real people".
+- Say "lower socioeconomic proxy", not "measured low income".
+- Say "scenario uplift", not "proven adoption".
+- Say "DeepSeek-assisted qualitative effect reasoning", not "DeepSeek generated the population".
 
 ## Troubleshooting
 
-### `llm_available()` is false
+### Missing Source Files
+
+Run Step 2. If any path starts with `MISS`, the simulator cannot build the
+Scotland segment table. Restore the missing cleaned census or Study 3 output
+files first.
+
+### DeepSeek Live Mode Does Not Run
 
 Check:
 
-```powershell
-$env:LLM_MODE
-$env:LLM_PROVIDER
-$env:LLM_MODEL
+```bash
+echo "$ZEVUP_LLM_MODE"
+echo "$DEEPSEEK_BASE_URL"
+echo "$DEEPSEEK_MODEL"
+test -n "$DEEPSEEK_API_KEY" && echo true || echo false
 ```
 
-Do not print your API key. Check only whether it exists:
+PowerShell:
 
 ```powershell
-[bool]$env:LLM_API_KEY
-[bool]$env:OPENAI_API_KEY
+$env:ZEVUP_LLM_MODE
+$env:DEEPSEEK_BASE_URL
+$env:DEEPSEEK_MODEL
+[bool]$env:DEEPSEEK_API_KEY
 ```
 
-For OpenAI-compatible providers, one of those should be `True`.
+If the API key is not set, live mode will return `llm_status = "fallback"` and
+use configured defaults.
 
-### API call fails with connection refused to `127.0.0.1:9`
+### API Call Fails With `127.0.0.1:9`
 
 Clear proxy variables:
+
+```bash
+unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+```
+
+PowerShell:
 
 ```powershell
 $env:HTTP_PROXY = ""
@@ -425,92 +889,26 @@ $env:all_proxy = ""
 
 Then restart the server.
 
-### The server starts slowly
+### Results Look Too Generic
 
-Oransim bootstraps a synthetic population and runtime state. For beginner
-testing, use:
+Check `llm_status`.
 
-```powershell
-$env:POP_SIZE = "10000"
-$env:SOUL_POOL_N = "5"
-```
+- `off` means configured defaults were used.
+- `mock` means coded mock adjustments were used.
+- `fallback` means DeepSeek did not run and defaults were used.
+- `used` means DeepSeek returned structured effects and messages.
 
-This is much lighter than the default.
+For more detailed messages, use live DeepSeek mode with a valid API key and a
+small `segment_limit` first.
 
-### The terminal shows the pound sign strangely
-
-On some Windows terminals, the `GBP` symbol may display with the wrong glyph.
-The underlying JSON file uses the correct Unicode value. This is a terminal
-encoding display issue, not a simulator logic issue.
-
-### The result is valid but looks too generic
-
-Try live LLM mode instead of mock mode. Mock mode is deterministic and designed
-for testing, not realism.
-
-### The live call is expensive or slow
-
-Start with one segment:
-
-```json
-{
-  "concept_id": "frugal_ev_city_9999",
-  "target_market": "UK",
-  "segments": ["urban_commuter"]
-}
-```
-
-Then run all five segments only when you are satisfied the setup works.
-
-## Developer checks
-
-Run these after changing the feature:
-
-```powershell
-$env:PYTHONPATH = "backend"
-$env:LLM_MODE = "mock"
-python -m pytest -q tests/test_frugal_ev.py
-python -m ruff check backend/ tests/test_frugal_ev.py
-python -m black --check backend/oransim/agents/frugal_ev_persona_prompt.py backend/oransim/api_routers/frugal_ev.py backend/oransim/schemas/frugal_ev_opinion.py tests/test_frugal_ev.py
-```
-
-Expected:
-
-```text
-4 passed
-All checks passed
-```
-
-## Suggested workflow for your analysis
+## Recommended Workflow
 
 Use this order:
 
-1. Run mock mode for all three concepts.
-2. Compare overall scores and strongest/weakest segments.
-3. Pick the best concept and run live LLM mode for one segment.
-4. If the live output looks sensible, run live mode for all five segments.
-5. Save the JSON output for each concept.
-6. Summarize:
-   - best concept,
-   - strongest buyer segment,
-   - weakest buyer segment,
-   - top three objections,
-   - top three message hooks,
-   - what product change should be tested next.
-
-## What not to claim
-
-Do not claim:
-
-- "The market will buy this car."
-- "This is survey evidence."
-- "This proves demand."
-
-Safer wording:
-
-- "The simulation suggests this concept may be more promising for urban
-  commuters than rural budget families."
-- "The main simulated blocker is charging access."
-- "The next real-world test should validate whether this objection appears in
-  interviews or survey responses."
-
+1. Run no-LLM mode with `use_llm = $false` to get a deterministic baseline.
+2. Run mock mode with `use_llm = $true` to verify the LLM-shaped path.
+3. Run live DeepSeek mode for a small `segment_limit`, such as 5 or 10.
+4. Compare `llm_status`, `overall_uplift`, `demographic_rankings`, and
+   `segment_results`.
+5. Save JSON outputs for reproducibility.
+6. Report results with the caveats above.

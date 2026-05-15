@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "work_packages": {
+    "WP1": {
+      "title": "User-centric strategies for global diffusion of frugal BEVs",
+      "first_slice_outputs": [
+        "segment acceptance/readiness",
+        "affordability response",
+        "charging barrier response",
+        "vehicle concept comparison inputs"
+      ]
+    },
+    "WP5": {
+      "title": "Evaluation, impacts and market uptake",
+      "first_slice_outputs": [
+        "baseline versus post-intervention readiness",
+        "weighted household uplift",
+        "segment-level acceptance determinants",
+        "inputs for uptake/proliferation modelling"
+      ]
+    },
+    "WP6": {
+      "title": "Communication, Dissemination and Exploitation",
+      "first_slice_outputs": [
+        "target segment list",
+        "message recommendations",
+        "intervention priority by segment",
+        "communication caveats"
+      ]
+    }
+  }
+}

@@ -1,0 +1,88 @@
+﻿{
+    "concept_name":  "Â£9,999 City EV",
+    "target_market":  "UK",
+    "overall_acceptance_score":  0.623,
+    "segment_opinions":  [
+                             {
+                                 "segment":  "urban_commuter",
+                                 "purchase_intent_score":  0.759,
+                                 "trust_score":  0.669,
+                                 "price_acceptance_score":  0.907,
+                                 "range_confidence_score":  0.273,
+                                 "charging_confidence_score":  0.6,
+                                 "top_positive_reason":  "compact daily trips and low running cost",
+                                 "top_objection":  "Apartment charging and parking access are uncertain.",
+                                 "what_would_change_my_mind":  "Reliable kerbside or workplace charging near home.",
+                                 "likely_social_comment":  "Â£9,999 City EV sounds useful if I can charge it near my flat."
+                             },
+                             {
+                                 "segment":  "first_time_car_buyer",
+                                 "purchase_intent_score":  0.705,
+                                 "trust_score":  0.669,
+                                 "price_acceptance_score":  0.907,
+                                 "range_confidence_score":  0.273,
+                                 "charging_confidence_score":  0.53,
+                                 "top_positive_reason":  "a monthly payment that competes with used cars",
+                                 "top_objection":  "Resale value and real-world battery life remain uncertain.",
+                                 "what_would_change_my_mind":  "A low monthly payment with insurance and battery warranty included.",
+                                 "likely_social_comment":  "If the finance deal is cheap enough, I would compare it with used petrol cars."
+                             },
+                             {
+                                 "segment":  "delivery_driver",
+                                 "purchase_intent_score":  0.637,
+                                 "trust_score":  0.669,
+                                 "price_acceptance_score":  0.907,
+                                 "range_confidence_score":  0.273,
+                                 "charging_confidence_score":  0.49,
+                                 "top_positive_reason":  "lower cost per kilometre for work",
+                                 "top_objection":  "Charging downtime could interrupt paid work.",
+                                 "what_would_change_my_mind":  "Evidence that daily routes can be completed with fast charging backup.",
+                                 "likely_social_comment":  "I care less about the badge and more about daily cost and downtime."
+                             },
+                             {
+                                 "segment":  "rural_budget_family",
+                                 "purchase_intent_score":  0.519,
+                                 "trust_score":  0.669,
+                                 "price_acceptance_score":  0.907,
+                                 "range_confidence_score":  0.273,
+                                 "charging_confidence_score":  0.4,
+                                 "top_positive_reason":  "warranty and household running-cost savings",
+                                 "top_objection":  "Range and public charging may not cover rural family use.",
+                                 "what_would_change_my_mind":  "A longer real-world range test and accessible local service network.",
+                                 "likely_social_comment":  "The idea is good, but range and charging outside the city would decide it."
+                             },
+                             {
+                                 "segment":  "ev_skeptic",
+                                 "purchase_intent_score":  0.493,
+                                 "trust_score":  0.669,
+                                 "price_acceptance_score":  0.907,
+                                 "range_confidence_score":  0.273,
+                                 "charging_confidence_score":  0.47,
+                                 "top_positive_reason":  "clear proof that battery risk is covered",
+                                 "top_objection":  "Battery durability proof is not strong enough yet.",
+                                 "what_would_change_my_mind":  "Independent owner reviews and a transferable long battery warranty.",
+                                 "likely_social_comment":  "Cheap is attractive, but I would wait for real battery reliability proof."
+                             }
+                         ],
+    "strongest_segments":  [
+                               "urban_commuter",
+                               "first_time_car_buyer"
+                           ],
+    "weakest_segments":  [
+                             "rural_budget_family",
+                             "ev_skeptic"
+                         ],
+    "top_objection_themes":  [
+                                 "Apartment charging and parking access are uncertain.",
+                                 "Resale value and real-world battery life remain uncertain.",
+                                 "Charging downtime could interrupt paid work.",
+                                 "Range and public charging may not cover rural family use.",
+                                 "Battery durability proof is not strong enough yet."
+                             ],
+    "top_message_hooks":  [
+                              "compact daily trips and low running cost",
+                              "a monthly payment that competes with used cars",
+                              "lower cost per kilometre for work"
+                          ],
+    "verdict":  "Promising for urban_commuter, first_time_car_buyer, delivery_driver. Overall acceptance score is 0.623."
+}

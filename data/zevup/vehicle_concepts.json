@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "vehicle_concepts": [
+    {
+      "concept_id": "zevup_l7e_passenger_2_seat",
+      "name": "ZEV-UP L7e 2-seat passenger vehicle",
+      "vehicle_class": "L7e light battery electric vehicle",
+      "seats": 2,
+      "primary_use_case": "urban and peri-urban personal mobility",
+      "range_class": "short urban range",
+      "charging_assumption": "home, workplace, depot, or local public charging depending on market context",
+      "battery_assumption": "small modular battery suitable for frugal BEV use cases",
+      "business_model_compatibility": [
+        "direct_purchase",
+        "lease",
+        "shared_mobility"
+      ]
+    },
+    {
+      "concept_id": "zevup_l7e_passenger_4_seat",
+      "name": "ZEV-UP L7e 4-seat passenger vehicle",
+      "vehicle_class": "L7e light battery electric vehicle",
+      "seats": 4,
+      "primary_use_case": "household and small-family local mobility",
+      "range_class": "short to medium local range",
+      "charging_assumption": "home or local public charging with higher household practicality requirements",
+      "battery_assumption": "modular battery with higher passenger-use flexibility",
+      "business_model_compatibility": [
+        "direct_purchase",
+        "lease",
+        "community_car_club"
+      ]
+    },
+    {
+      "concept_id": "zevup_l7e_commercial_2_seat",
+      "name": "ZEV-UP L7e 2-seat commercial vehicle",
+      "vehicle_class": "L7e light battery electric vehicle",
+      "seats": 2,
+      "primary_use_case": "last-mile goods and service missions",
+      "range_class": "short mission-based range",
+      "charging_assumption": "depot, workplace, or planned-route charging",
+      "battery_assumption": "modular battery suitable for fleet or battery service models",
+      "business_model_compatibility": [
+        "fleet_lease",
+        "business_purchase",
+        "battery_service"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "interventions": [
+    {
+      "intervention_id": "awareness_campaign",
+      "name": "Awareness campaign",
+      "description": "Improves awareness and willingness to consider a ZEV-UP vehicle.",
+      "default_effect": 0.025,
+      "min_effect": 0.0,
+      "max_effect": 0.08,
+      "primary_wp": "WP6",
+      "effect_targets": [
+        "awareness",
+        "willingness_to_consider"
+      ]
+    },
+    {
+      "intervention_id": "price_subsidy",
+      "name": "Price subsidy",
+      "description": "Improves affordability for lower-income-proxy and price-sensitive groups.",
+      "default_effect": 0.055,
+      "min_effect": 0.0,
+      "max_effect": 0.16,
+      "primary_wp": "WP1",
+      "effect_targets": [
+        "affordability",
+        "purchase_feasibility"
+      ]
+    },
+    {
+      "intervention_id": "charging_support",
+      "name": "Charging support",
+      "description": "Improves charging confidence and readiness for charging-constrained groups.",
+      "default_effect": 0.075,
+      "min_effect": 0.0,
+      "max_effect": 0.20,
+      "primary_wp": "WP5",
+      "effect_targets": [
+        "charging_confidence",
+        "readiness"
+      ]
+    }
+  ]
+}

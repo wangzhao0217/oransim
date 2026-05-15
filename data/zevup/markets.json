@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "markets": [
+    {
+      "market_id": "scotland",
+      "display_name": "Scotland",
+      "country": "United Kingdom",
+      "first_supported_year": 2025,
+      "last_supported_year": 2040,
+      "default_scenario": "neutral_lr_central",
+      "census_dir": "data/demographic_data/2022_downloads/2022 match 2011/cleaned",
+      "household_feasibility_path": "output/microsimulation/household_feasibility.parquet",
+      "study3_long_path": "output/study3/feasible_market_long.parquet",
+      "t54_penetration_path": "output/study3/zevup_t54_penetration.csv",
+      "t55_entry_year_path": "output/study3/zevup_t55_entry_year.csv",
+      "caveats": [
+        "Segment rows are census-constrained synthetic weighted cells, not observed individual records.",
+        "Income is represented by socioeconomic proxy groups from NS-SeC and microsimulation weights."
+      ]
+    }
+  ]
+}

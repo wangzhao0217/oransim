@@ -26,6 +26,7 @@ from .api_routers import sandbox as sandbox_router
 from .api_routers import ueb as ueb_router
 from .api_routers import v2 as v2_router
 from .api_routers import ws as ws_router
+from .api_routers import zevup as zevup_router
 
 logger = logging.getLogger("oransim.api")
 
@@ -120,6 +121,7 @@ app.include_router(sandbox_router.router)
 app.include_router(ueb_router.router)
 app.include_router(v2_router.router)
 app.include_router(ws_router.router)
+app.include_router(zevup_router.router)
 
 
 @app.get("/")
