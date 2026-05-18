@@ -36,6 +36,11 @@ Thumbs.db
 *.swo
 
 # Project artifacts
+output/
+.cache/
+frugal-ev-mvp-guide_files/
+zevup_all_scenarios_dataset.html
+zevup_all_scenarios_dataset_files/
 data/synthetic/*.json
 data/synthetic/*.csv
 data/synthetic/*.parquet

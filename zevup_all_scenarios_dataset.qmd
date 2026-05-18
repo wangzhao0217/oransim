@@ -1,0 +1,1044 @@
+---
+title: "ZEV-UP Minimum Scenario Evidence For Study 3"
+subtitle: "Run only the household-feasibility slices needed to support the current manuscript"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Purpose
+
+This notebook is a small, reproducible control panel for the Study 3 manuscript evidence.
+It does four things:
+
+1. reads the full `feasible_market_long.parquet` panel to confirm the wider 12-scenario by 16-year design;
+2. selects only the manuscript-minimum household-feasibility slices;
+3. optionally generates selected missing slices;
+4. summarizes the selected slices through compact tables for reuse in `paper/study3_multiscale_nature_paper.qmd`.
+
+The default evidence set is deliberately small:
+
+- `neutral_lr_central`, `2025`: the current-year deterministic persona/target-group slice.
+- `steep_lr_high`, `2040`: a high-transition future slice showing the same household-feasibility machinery works for a separate scenario-year.
+
+The full panel currently contains 12 scenarios by 16 years, or 192 scenario-year combinations, but this notebook does **not** generate all 192 household slices by default.
+That is more computation and disk use than the current manuscript needs.
+
+::: {.callout-warning}
+## Live LLM Cost Warning
+
+This notebook does not call DeepSeek or any other live LLM in its default configuration.
+The selected-slice generation and summary sections use deterministic Python code only.
+DeepSeek is used only if you explicitly set `RUN_DEEPSEEK_AUDIT = True` below and provide a valid `DEEPSEEK_API_KEY`.
+Those calls may incur API cost; the live API call count is controlled by `DEEPSEEK_REPEAT_RUNS`, and the amount of segment data in each call is controlled by `DEEPSEEK_SEGMENT_LIMIT`.
+For the manuscript, keep deterministic `off` mode as the main result and treat DeepSeek as an audited exploratory sensitivity only.
+:::
+
+## Controls
+
+Edit these values before rendering.
+
+```{python}
+# Minimum evidence set used by the current Study 3 manuscript.
+SELECTED_SCENARIO_YEARS = [
+    {
+        "scenario": "neutral_lr_central",
+        "year": 2025,
+        "paper_role": "current-year deterministic persona and target-group evidence",
+    },
+    {
+        "scenario": "neutral_lr_central",
+        "year": 2040,
+        "paper_role": "future central scenario-year comparison",
+    },
+    {
+        "scenario": "steep_lr_high",
+        "year": 2025,
+        "paper_role": "current-year high-transition scenario comparison",
+    },
+    {
+        "scenario": "steep_lr_high",
+        "year": 2040,
+        "paper_role": "future high-transition scenario-year implementation check",
+    },
+]
+
+# Add extra explicit checks here only when needed. This notebook is not the
+# default place to run the full 192 scenario-year grid.
+EXTRA_SCENARIO_YEARS = []
+
+# Set True only when you intend to generate selected missing scenario-year slices.
+GENERATE_SELECTED_MISSING = False
+
+# Set True to replace existing generated slice files.
+OVERWRITE_EXISTING = False
+
+# Output locations relative to the repository root.
+SCENARIO_OUTPUT_ROOT = "output/microsimulation/scenarios"
+SUMMARY_OUTPUT_ROOT = "output/microsimulation/manuscript_minimum_summary"
+
+# Optional DeepSeek segment-audit controls.
+# Set RUN_DEEPSEEK_AUDIT = False for zero live API calls.
+LOAD_ENV_FILE = True
+RUN_DEEPSEEK_AUDIT = True
+REQUIRE_DEEPSEEK_API_KEY = True
+DEEPSEEK_API_KEY_FILE = ""
+ZEVUP_LLM_MODE = "deepseek"
+ZEVUP_LLM_COMPARISON_MODES = ["off", "mock", ZEVUP_LLM_MODE]
+
+# DeepSeek receives segment summaries, not household-level rows.
+# One DeepSeek API call is made per repeat run. Prompt size grows with segment limit.
+DEEPSEEK_AUDIT_SCENARIO = "neutral_lr_central"
+DEEPSEEK_AUDIT_YEAR = 2025
+DEEPSEEK_SEGMENT_LIMIT = 5
+DEEPSEEK_REPEAT_RUNS = 3
+DEEPSEEK_INTERVENTIONS = [
+    "awareness_campaign",
+    "charging_support",
+    "price_subsidy",
+]
+DEEPSEEK_AUDIT_OUTPUT_ROOT = "output/zevup_llm_audits"
+
+# Safety caps. Increase only after checking expected calls and prompt size.
+MAX_DEEPSEEK_SEGMENTS_WITHOUT_OVERRIDE = 10
+MAX_DEEPSEEK_RUNS_WITHOUT_OVERRIDE = 10
+ALLOW_LARGE_DEEPSEEK_AUDIT = False
+```
+
+## Setup
+
+```{python}
+from __future__ import annotations
+
+import json
+import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+import pandas as pd
+import pyarrow.parquet as pq
+
+
+def find_repo_root() -> Path:
+    """Find the EV_modelling repository root from common render locations."""
+    candidates = [Path.cwd(), *Path.cwd().parents, Path("/workspaces/EV_modelling")]
+    for candidate in candidates:
+        if (candidate / "output" / "study3" / "feasible_market_long.parquet").exists():
+            return candidate
+    raise FileNotFoundError(
+        "Could not find output/study3/feasible_market_long.parquet from this working directory."
+    )
+
+
+REPO_ROOT = find_repo_root()
+ORANSIM_ROOT = REPO_ROOT / "studies" / "oransim"
+SCENARIO_OUTPUT_ROOT = REPO_ROOT / SCENARIO_OUTPUT_ROOT
+SUMMARY_OUTPUT_ROOT = REPO_ROOT / SUMMARY_OUTPUT_ROOT
+
+for path in [REPO_ROOT, ORANSIM_ROOT / "backend"]:
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
+
+from studies.microsimulation.scripts.generate_household_feasibility_slice import (  # noqa: E402
+    adoption_calibration_error,
+    generate_household_feasibility_slice,
+)
+
+PANEL_PATH = REPO_ROOT / "output" / "study3" / "feasible_market_long.parquet"
+POPULATION_PATH = REPO_ROOT / "output" / "microsimulation" / "synthetic_population.parquet"
+DEFAULT_SLICE_PATH = REPO_ROOT / "output" / "microsimulation" / "household_feasibility.parquet"
+
+
+def _env_paths() -> list[Path]:
+    """Return local env files to try, in priority order."""
+    return [
+        ORANSIM_ROOT / ".env",
+        ORANSIM_ROOT / ".env.local",
+        ORANSIM_ROOT / "backend" / ".env",
+        REPO_ROOT / ".env",
+        REPO_ROOT / ".env.local",
+    ]
+
+
+def _parse_env_value(env_path: Path, key: str) -> str | None:
+    """Read one key from an env file without printing secret values."""
+    if not env_path.exists():
+        return None
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line.removeprefix("export ").strip()
+        if "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        if name.strip() != key:
+            continue
+        value = value.strip().strip('"').strip("'")
+        return value or None
+    return None
+
+
+def _resolve_optional_key_file(path_value: str) -> Path | None:
+    """Resolve an optional key-file path from controls or env vars."""
+    if not path_value:
+        return None
+    key_path = Path(path_value).expanduser()
+    if key_path.is_absolute():
+        return key_path
+    for base in [ORANSIM_ROOT, REPO_ROOT]:
+        candidate = base / key_path
+        if candidate.exists():
+            return candidate
+    return REPO_ROOT / key_path
+
+
+def load_required_deepseek_api_key() -> str | None:
+    """Load DEEPSEEK_API_KEY when required, returning source metadata only."""
+    if os.environ.get("DEEPSEEK_API_KEY"):
+        return "existing environment or loaded env file"
+
+    for env_path in _env_paths():
+        value = _parse_env_value(env_path, "DEEPSEEK_API_KEY")
+        if value:
+            os.environ["DEEPSEEK_API_KEY"] = value
+            return str(env_path)
+
+    key_file_value = os.environ.get("DEEPSEEK_API_KEY_FILE", DEEPSEEK_API_KEY_FILE)
+    key_path = _resolve_optional_key_file(key_file_value)
+    if key_path and key_path.exists():
+        value = key_path.read_text(encoding="utf-8").strip()
+        if value:
+            os.environ["DEEPSEEK_API_KEY"] = value
+            return str(key_path)
+
+    return None
+
+
+if LOAD_ENV_FILE:
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        print("python-dotenv is not installed; skipping .env loading.")
+    else:
+        loaded_env_files = []
+        for env_path in _env_paths():
+            if env_path.exists():
+                load_dotenv(env_path, override=False)
+                loaded_env_files.append(str(env_path))
+        if loaded_env_files:
+            print(f"Loaded env files without printing secret values: {loaded_env_files}")
+        else:
+            print("No .env file found. Use shell env vars or create studies/oransim/.env.")
+
+deepseek_key_source = (
+    load_required_deepseek_api_key() if REQUIRE_DEEPSEEK_API_KEY else None
+)
+
+print(f"Repository root: {REPO_ROOT}")
+print(f"Panel path: {PANEL_PATH}")
+print(f"Population path: {POPULATION_PATH}")
+print(f"DeepSeek key available: {bool(os.environ.get('DEEPSEEK_API_KEY'))}")
+if REQUIRE_DEEPSEEK_API_KEY:
+    print(
+        "DeepSeek key source: "
+        + (deepseek_key_source if deepseek_key_source else "not found")
+        + " (secret value not printed)"
+    )
+```
+
+## Scenario-Year Inventory
+
+```{python}
+panel_keys = pd.read_parquet(PANEL_PATH, columns=["scenario", "year"])
+full_scenario_years = (
+    panel_keys.drop_duplicates()
+    .assign(year=lambda x: x["year"].astype(int))
+    .sort_values(["scenario", "year"])
+    .reset_index(drop=True)
+)
+
+selection_rows = [*SELECTED_SCENARIO_YEARS, *EXTRA_SCENARIO_YEARS]
+scenario_years = pd.DataFrame(selection_rows)
+
+required_columns = {"scenario", "year"}
+missing_columns = required_columns - set(scenario_years.columns)
+if missing_columns:
+    raise ValueError(f"Selected scenario-year rows are missing columns: {sorted(missing_columns)}")
+
+scenario_years["year"] = scenario_years["year"].astype(int)
+if "paper_role" not in scenario_years.columns:
+    scenario_years["paper_role"] = "optional manuscript sensitivity check"
+scenario_years["paper_role"] = scenario_years["paper_role"].fillna(
+    "optional manuscript sensitivity check"
+)
+scenario_years = scenario_years.drop_duplicates(["scenario", "year"]).reset_index(drop=True)
+
+panel_check = scenario_years.merge(
+    full_scenario_years,
+    on=["scenario", "year"],
+    how="left",
+    indicator=True,
+)
+missing_from_panel = panel_check[panel_check["_merge"] == "left_only"]
+if not missing_from_panel.empty:
+    raise ValueError(
+        "Selected scenario-years are not present in feasible_market_long.parquet: "
+        + missing_from_panel[["scenario", "year"]].to_string(index=False)
+    )
+
+scenario_years = scenario_years.sort_values(["scenario", "year"]).reset_index(drop=True)
+
+print(f"Full panel combinations available: {len(full_scenario_years):,}")
+print(f"Full panel scenarios: {full_scenario_years['scenario'].nunique():,}")
+print(f"Full panel years: {full_scenario_years['year'].nunique():,}")
+print(f"Selected manuscript-minimum combinations: {len(scenario_years):,}")
+scenario_years
+```
+
+```{python}
+full_scenario_matrix = (
+    full_scenario_years.assign(value=1)
+    .pivot_table(index="scenario", columns="year", values="value", fill_value=0)
+    .astype(int)
+)
+full_scenario_matrix
+```
+
+## Selected Output Plan
+
+Selected generated slices are written to:
+
+```text
+output/microsimulation/scenarios/<scenario>_<year>/household_feasibility.parquet
+```
+
+The original reviewed default file, `output/microsimulation/household_feasibility.parquet`, is used for `neutral_lr_central`, `2025` when present and is not modified.
+
+```{python}
+def slice_path(scenario: str, year: int) -> Path:
+    return SCENARIO_OUTPUT_ROOT / f"{scenario}_{int(year)}" / "household_feasibility.parquet"
+
+
+def existing_summary_path(scenario: str, year: int) -> Path:
+    """Return the existing selected slice path used for summaries, if available."""
+    scenario_path = slice_path(scenario, year)
+    if scenario_path.exists():
+        return scenario_path
+    if scenario == "neutral_lr_central" and int(year) == 2025 and DEFAULT_SLICE_PATH.exists():
+        return DEFAULT_SLICE_PATH
+    return scenario_path
+
+
+def parquet_columns(path: Path) -> list[str]:
+    return pq.ParquetFile(path).schema_arrow.names
+
+
+plan = scenario_years.copy()
+plan["generation_path"] = [str(slice_path(row.scenario, row.year)) for row in plan.itertuples()]
+plan["summary_path"] = [
+    str(existing_summary_path(row.scenario, row.year)) for row in plan.itertuples()
+]
+plan["exists"] = [Path(path).exists() for path in plan["summary_path"]]
+plan["size_mb"] = [
+    round(Path(path).stat().st_size / 1_000_000, 2) if Path(path).exists() else 0.0
+    for path in plan["summary_path"]
+]
+
+
+def planned_action(row: pd.Series) -> str:
+    if row["exists"] and not OVERWRITE_EXISTING:
+        return "use_existing"
+    if row["exists"] and OVERWRITE_EXISTING:
+        return "overwrite"
+    return "generate_selected" if GENERATE_SELECTED_MISSING else "dry_run_missing"
+
+
+plan["action"] = plan.apply(planned_action, axis=1)
+
+print(plan["action"].value_counts().to_string())
+plan
+```
+
+## Generate Selected Scenario Slices
+
+This chunk generates only the selected missing slices when `GENERATE_SELECTED_MISSING = True`.
+With the default `False`, it is a dry run and writes no household-feasibility parquet files.
+
+```{python}
+SUMMARY_OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+
+generation_rows = []
+
+if not GENERATE_SELECTED_MISSING:
+    print("Dry run only. Set GENERATE_SELECTED_MISSING = True to write selected missing slices.")
+else:
+    for row in plan.itertuples(index=False):
+        output_path = Path(row.generation_path)
+        summary_path = Path(row.summary_path)
+        started = datetime.now(timezone.utc)
+
+        if summary_path.exists() and not OVERWRITE_EXISTING:
+            status = "skipped_existing"
+            rows = None
+            max_error = None
+        else:
+            try:
+                result = generate_household_feasibility_slice(
+                    scenario=row.scenario,
+                    year=int(row.year),
+                    synthetic_population_path=POPULATION_PATH,
+                    panel_path=PANEL_PATH,
+                    output_path=output_path,
+                    overwrite=OVERWRITE_EXISTING,
+                )
+                status = "generated"
+                rows = len(result)
+                max_error = adoption_calibration_error(result)
+            except Exception as exc:
+                status = f"failed: {type(exc).__name__}: {exc}"
+                rows = None
+                max_error = None
+
+        finished = datetime.now(timezone.utc)
+        generation_rows.append(
+            {
+                "scenario": row.scenario,
+                "year": int(row.year),
+                "output_path": str(output_path),
+                "summary_path": str(summary_path),
+                "status": status,
+                "rows": rows,
+                "max_oa_adoption_error": max_error,
+                "started_utc": started.isoformat(),
+                "finished_utc": finished.isoformat(),
+                "elapsed_seconds": round((finished - started).total_seconds(), 3),
+                "size_mb": round(output_path.stat().st_size / 1_000_000, 2)
+                if output_path.exists()
+                else 0.0,
+            }
+        )
+        print(f"{row.scenario} {int(row.year)}: {status}")
+
+generation_log = pd.DataFrame(generation_rows)
+if not generation_log.empty:
+    generation_log.to_csv(SUMMARY_OUTPUT_ROOT / "generation_log.csv", index=False)
+generation_log
+```
+
+## Discover Available Selected Slices
+
+This section scans only the selected evidence set and includes the reviewed default 2025 neutral central file when present.
+
+```{python}
+available = plan.copy()
+available["output_path"] = available["summary_path"]
+available["exists"] = [Path(path).exists() for path in available["output_path"]]
+
+available_slices = available[available["exists"]].copy().reset_index(drop=True)
+missing_slices = available[~available["exists"]].copy().reset_index(drop=True)
+
+print(f"Available slices: {len(available_slices):,}")
+print(f"Missing slices: {len(missing_slices):,}")
+available_slices.head(20)
+```
+
+## Summarize Selected Results
+
+The summary loop reads one parquet at a time and writes compact CSV outputs.
+It does not build a single raw multi-scenario dataframe in memory.
+
+```{python}
+PROFILE_COLS = [
+    "nssec_group",
+    "accommodation",
+    "household_size",
+    "car_ownership",
+    "tenure",
+]
+
+SUMMARY_COLUMNS = [
+    "scenario",
+    "year",
+    "household_id",
+    "oa_code",
+    "household_weight",
+    "feasible_share",
+    "feasible_h",
+    "adopts",
+    "AP_i",
+    "G_it",
+    "A_it",
+    *PROFILE_COLS,
+]
+
+
+def weighted_mean(values: pd.Series, weights: pd.Series) -> float:
+    total = float(weights.sum())
+    if total <= 0:
+        return 0.0
+    return float((values.astype(float) * weights.astype(float)).sum() / total)
+
+
+scenario_summary_rows = []
+profile_summary_frames = []
+oa_summary_frames = []
+
+for row in available_slices.itertuples(index=False):
+    path = Path(row.output_path)
+    columns = [column for column in SUMMARY_COLUMNS if column in parquet_columns(path)]
+    df = pd.read_parquet(path, columns=columns)
+    weights = df["household_weight"].astype(float)
+    adopted_weight = df["adopts"].astype(float) * weights
+
+    scenario_summary_rows.append(
+        {
+            "scenario": row.scenario,
+            "year": int(row.year),
+            "paper_role": row.paper_role,
+            "rows": len(df),
+            "output_path": str(path),
+            "household_weight": float(weights.sum()),
+            "adopted_weight": float(adopted_weight.sum()),
+            "weighted_adoption_share": weighted_mean(df["adopts"], weights),
+            "weighted_feasible_h": weighted_mean(df["feasible_h"], weights),
+            "weighted_feasible_share_prior": weighted_mean(df["feasible_share"], weights),
+            "weighted_AP_i": weighted_mean(df["AP_i"], weights) if "AP_i" in df else None,
+            "weighted_G_it": weighted_mean(df["G_it"], weights) if "G_it" in df else None,
+            "weighted_A_it": weighted_mean(df["A_it"], weights) if "A_it" in df else None,
+        }
+    )
+
+    profile = (
+        df.assign(adopted_weight=adopted_weight)
+        .groupby(PROFILE_COLS, dropna=False, as_index=False)
+        .agg(
+            household_weight=("household_weight", "sum"),
+            adopted_weight=("adopted_weight", "sum"),
+            weighted_feasible_h=("feasible_h", lambda x: weighted_mean(x, weights.loc[x.index])),
+        )
+    )
+    profile["scenario"] = row.scenario
+    profile["year"] = int(row.year)
+    profile["paper_role"] = row.paper_role
+    profile["weighted_adoption_share"] = (
+        profile["adopted_weight"] / profile["household_weight"].replace(0, pd.NA)
+    ).fillna(0.0)
+    profile_summary_frames.append(profile)
+
+    oa = (
+        df.assign(adopted_weight=adopted_weight)
+        .groupby("oa_code", dropna=False, as_index=False)
+        .agg(
+            household_weight=("household_weight", "sum"),
+            adopted_weight=("adopted_weight", "sum"),
+            feasible_share=("feasible_share", "first"),
+            weighted_feasible_h=("feasible_h", lambda x: weighted_mean(x, weights.loc[x.index])),
+        )
+    )
+    oa["scenario"] = row.scenario
+    oa["year"] = int(row.year)
+    oa["paper_role"] = row.paper_role
+    oa["weighted_adoption_share"] = (
+        oa["adopted_weight"] / oa["household_weight"].replace(0, pd.NA)
+    ).fillna(0.0)
+    oa["adoption_calibration_error"] = (
+        oa["weighted_adoption_share"] - oa["feasible_share"]
+    ).abs()
+    oa_summary_frames.append(oa)
+
+scenario_summary = pd.DataFrame(scenario_summary_rows)
+if not scenario_summary.empty:
+    scenario_summary = scenario_summary.sort_values(["scenario", "year"])
+profile_summary = (
+    pd.concat(profile_summary_frames, ignore_index=True)
+    if profile_summary_frames
+    else pd.DataFrame()
+)
+oa_summary = (
+    pd.concat(oa_summary_frames, ignore_index=True)
+    if oa_summary_frames
+    else pd.DataFrame()
+)
+
+scenario_summary.to_csv(SUMMARY_OUTPUT_ROOT / "scenario_summary.csv", index=False)
+profile_summary.to_csv(SUMMARY_OUTPUT_ROOT / "profile_summary.csv", index=False)
+oa_summary.to_csv(SUMMARY_OUTPUT_ROOT / "oa_summary.csv", index=False)
+
+print(f"Scenario summary rows: {len(scenario_summary):,}")
+print(f"Profile summary rows: {len(profile_summary):,}")
+print(f"OA summary rows: {len(oa_summary):,}")
+scenario_summary.head(20)
+```
+
+## Selected Scenario Results
+
+```{python}
+from IPython.display import display
+if scenario_summary.empty:
+    print("No available slices to summarize.")
+else:
+    display(scenario_summary.sort_values(
+        ["weighted_adoption_share", "weighted_feasible_h"],
+        ascending=False,
+    ).head(20))
+```
+
+```{python}
+from IPython.display import display
+if not scenario_summary.empty:
+    trend = scenario_summary.pivot_table(
+        index="year",
+        columns="scenario",
+        values="weighted_adoption_share",
+    )
+    display(trend)
+```
+
+```{python}
+import matplotlib.pyplot as plt
+if not scenario_summary.empty:
+    ax = (
+        scenario_summary.sort_values(["scenario", "year"])
+        .pivot(index="year", columns="scenario", values="weighted_adoption_share")
+        .plot(figsize=(12, 7), marker="o")
+    )
+    ax.set_title("Weighted household adoption share for selected manuscript slices")
+    ax.set_xlabel("Year")
+    ax.set_ylabel("Weighted adoption share")
+    ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left")
+    plt.show()
+```
+
+## Household Profile Results
+
+```{python}
+from IPython.display import display
+if profile_summary.empty:
+    print("No profile summary available.")
+else:
+    top_profiles = profile_summary.sort_values(
+        ["year", "weighted_adoption_share", "household_weight"],
+        ascending=[True, False, False],
+    ).head(30)
+    display(top_profiles[
+        [
+            "scenario",
+            "year",
+            "paper_role",
+            *PROFILE_COLS,
+            "household_weight",
+            "weighted_adoption_share",
+            "weighted_feasible_h",
+        ]
+    ])
+```
+
+```{python}
+if not profile_summary.empty:
+    nssec_summary = (
+        profile_summary.groupby(["scenario", "year", "nssec_group"], as_index=False)
+        .agg(
+            household_weight=("household_weight", "sum"),
+            adopted_weight=("adopted_weight", "sum"),
+        )
+    )
+    nssec_summary["weighted_adoption_share"] = (
+        nssec_summary["adopted_weight"]
+        / nssec_summary["household_weight"].replace(0, pd.NA)
+    ).fillna(0.0)
+    from IPython.display import display
+    display(nssec_summary.sort_values(
+        ["year", "weighted_adoption_share"],
+        ascending=[True, False],
+    ).head(30))
+```
+
+## Calibration Checks
+
+```{python}
+from IPython.display import display
+if oa_summary.empty:
+    print("No OA summary available.")
+else:
+    calibration = (
+        oa_summary.groupby(["scenario", "year"], as_index=False)
+        .agg(
+            max_oa_error=("adoption_calibration_error", "max"),
+            mean_oa_error=("adoption_calibration_error", "mean"),
+            oa_count=("oa_code", "nunique"),
+        )
+        .sort_values(["max_oa_error", "mean_oa_error"], ascending=False)
+    )
+    calibration.to_csv(SUMMARY_OUTPUT_ROOT / "calibration_summary.csv", index=False)
+    display(calibration.head(30))
+```
+
+## Optional DeepSeek Segment Audit
+
+This section is the only place in this notebook that can call DeepSeek.
+It is disabled by default.
+
+DeepSeek is **not** run on all household rows.
+The audit script first builds weighted Scotland segment summaries for one scenario-year, then sends only the first `DEEPSEEK_SEGMENT_LIMIT` segment summaries to DeepSeek.
+One live DeepSeek API call is made per repeat run, so the direct call count is:
+
+```text
+live_api_calls = DEEPSEEK_REPEAT_RUNS
+```
+
+The number of returned effect rows is approximately:
+
+```text
+effect_rows = DEEPSEEK_SEGMENT_LIMIT * len(DEEPSEEK_INTERVENTIONS) * DEEPSEEK_REPEAT_RUNS
+```
+
+Start with `DEEPSEEK_SEGMENT_LIMIT = 5` and `DEEPSEEK_REPEAT_RUNS = 3`.
+Only increase those values after inspecting the audit output.
+
+```{python}
+target_exists = (
+    (full_scenario_years["scenario"] == DEEPSEEK_AUDIT_SCENARIO)
+    & (full_scenario_years["year"] == int(DEEPSEEK_AUDIT_YEAR))
+).any()
+
+if not target_exists:
+    raise ValueError(
+        f"DeepSeek audit target not found in panel: "
+        f"{DEEPSEEK_AUDIT_SCENARIO} {DEEPSEEK_AUDIT_YEAR}"
+    )
+
+if int(DEEPSEEK_SEGMENT_LIMIT) < 1:
+    raise ValueError("DEEPSEEK_SEGMENT_LIMIT must be at least 1.")
+if int(DEEPSEEK_REPEAT_RUNS) < 1:
+    raise ValueError("DEEPSEEK_REPEAT_RUNS must be at least 1.")
+if not DEEPSEEK_INTERVENTIONS:
+    raise ValueError("DEEPSEEK_INTERVENTIONS must contain at least one intervention.")
+if ZEVUP_LLM_MODE != "deepseek":
+    raise ValueError("This audit notebook supports ZEVUP_LLM_MODE = 'deepseek' for live LLM runs.")
+
+if not ALLOW_LARGE_DEEPSEEK_AUDIT:
+    if int(DEEPSEEK_SEGMENT_LIMIT) > int(MAX_DEEPSEEK_SEGMENTS_WITHOUT_OVERRIDE):
+        raise ValueError(
+            "DEEPSEEK_SEGMENT_LIMIT is above the safety cap. "
+            "Lower it or set ALLOW_LARGE_DEEPSEEK_AUDIT = True."
+        )
+    if int(DEEPSEEK_REPEAT_RUNS) > int(MAX_DEEPSEEK_RUNS_WITHOUT_OVERRIDE):
+        raise ValueError(
+            "DEEPSEEK_REPEAT_RUNS is above the safety cap. "
+            "Lower it or set ALLOW_LARGE_DEEPSEEK_AUDIT = True."
+        )
+
+deepseek_key_available = bool(os.environ.get("DEEPSEEK_API_KEY"))
+live_prompts_if_rendered = (
+    int(DEEPSEEK_REPEAT_RUNS)
+    if RUN_DEEPSEEK_AUDIT and deepseek_key_available
+    else 0
+)
+expected_effect_rows = (
+    live_prompts_if_rendered
+    * int(DEEPSEEK_SEGMENT_LIMIT)
+    * len(DEEPSEEK_INTERVENTIONS)
+)
+effect_rows_if_enabled_with_key = (
+    int(DEEPSEEK_REPEAT_RUNS)
+    * int(DEEPSEEK_SEGMENT_LIMIT)
+    * len(DEEPSEEK_INTERVENTIONS)
+)
+
+deepseek_plan = pd.DataFrame(
+    [
+        {
+            "run_enabled": RUN_DEEPSEEK_AUDIT,
+            "scenario": DEEPSEEK_AUDIT_SCENARIO,
+            "year": int(DEEPSEEK_AUDIT_YEAR),
+            "zevup_llm_mode": ZEVUP_LLM_MODE,
+            "comparison_modes": ", ".join(ZEVUP_LLM_COMPARISON_MODES),
+            "segment_limit": int(DEEPSEEK_SEGMENT_LIMIT),
+            "repeat_runs": int(DEEPSEEK_REPEAT_RUNS),
+            "interventions": ", ".join(DEEPSEEK_INTERVENTIONS),
+            "live_api_calls_if_enabled": int(DEEPSEEK_REPEAT_RUNS),
+            "live_prompts_this_render": live_prompts_if_rendered,
+            "expected_effect_rows_this_render": expected_effect_rows,
+            "effect_rows_if_enabled_with_key": effect_rows_if_enabled_with_key,
+            "deepseek_key_available": deepseek_key_available,
+        }
+    ]
+)
+display(deepseek_plan)
+print(
+    f"DeepSeek prompt plan for this render: {live_prompts_if_rendered} prompt(s). "
+    f"Each prompt includes up to {int(DEEPSEEK_SEGMENT_LIMIT)} segment summary row(s) "
+    f"and {len(DEEPSEEK_INTERVENTIONS)} intervention(s)."
+)
+```
+
+```{python}
+deepseek_audit_run_dir = None
+
+if not RUN_DEEPSEEK_AUDIT:
+    print("DeepSeek audit disabled. Set RUN_DEEPSEEK_AUDIT = True to run live DeepSeek.")
+else:
+    if REQUIRE_DEEPSEEK_API_KEY and not os.environ.get("DEEPSEEK_API_KEY"):
+        raise RuntimeError(
+            "RUN_DEEPSEEK_AUDIT is True, but DEEPSEEK_API_KEY is not set. "
+            "Add it to studies/oransim/.env or export it before rendering."
+        )
+
+    import importlib
+    import inspect
+    import scripts.audit_zevup_llm_effects as zevup_llm_audit
+
+    # Reload because notebooks can keep an older imported run_audit signature.
+    zevup_llm_audit = importlib.reload(zevup_llm_audit)
+
+    run_audit_kwargs = {
+        "year": int(DEEPSEEK_AUDIT_YEAR),
+        "scenario": DEEPSEEK_AUDIT_SCENARIO,
+        "segment_limit": int(DEEPSEEK_SEGMENT_LIMIT),
+        "runs": int(DEEPSEEK_REPEAT_RUNS),
+        "output_dir": REPO_ROOT / DEEPSEEK_AUDIT_OUTPUT_ROOT,
+        "selected_interventions": list(DEEPSEEK_INTERVENTIONS),
+    }
+    if "live_mode" in inspect.signature(zevup_llm_audit.run_audit).parameters:
+        run_audit_kwargs["live_mode"] = ZEVUP_LLM_MODE
+    elif ZEVUP_LLM_MODE != "deepseek":
+        raise RuntimeError(
+            "The loaded audit script does not support live_mode. "
+            "Restart the kernel or update scripts/audit_zevup_llm_effects.py."
+        )
+
+    print(
+        f"Starting DeepSeek audit: {int(DEEPSEEK_REPEAT_RUNS)} prompt(s) planned, "
+        f"{int(DEEPSEEK_SEGMENT_LIMIT)} segment(s) per prompt."
+    )
+    deepseek_audit_run_dir = zevup_llm_audit.run_audit(**run_audit_kwargs)
+    print(f"DeepSeek audit run directory: {deepseek_audit_run_dir}")
+```
+
+```{python}
+if deepseek_audit_run_dir is None:
+    print("No DeepSeek audit output for this render.")
+else:
+    audit_summary_path = Path(deepseek_audit_run_dir) / "audit_summary.json"
+    effects_path = Path(deepseek_audit_run_dir) / "effects_long.csv"
+    comparison_path = Path(deepseek_audit_run_dir) / "mode_comparison.csv"
+    variation_path = Path(deepseek_audit_run_dir) / "effect_variation.csv"
+
+    print(f"audit_summary.json: {audit_summary_path}")
+    print(f"effects_long.csv: {effects_path}")
+    print(f"mode_comparison.csv: {comparison_path}")
+    print(f"effect_variation.csv: {variation_path}")
+
+    display(pd.read_csv(comparison_path))
+```
+
+## Check DeepSeek Output
+
+This section checks the audit files created by the optional DeepSeek run.
+It does not call the API again.
+
+```{python}
+if deepseek_audit_run_dir is None:
+    print("No DeepSeek audit output to check.")
+else:
+    audit_dir = Path(deepseek_audit_run_dir)
+    raw_dir = audit_dir / "raw"
+    audit_paths = {
+        "audit_summary": audit_dir / "audit_summary.json",
+        "effects_long": audit_dir / "effects_long.csv",
+        "mode_comparison": audit_dir / "mode_comparison.csv",
+        "effect_variation": audit_dir / "effect_variation.csv",
+        "segment_inputs": audit_dir / "segment_inputs.json",
+    }
+
+    missing_files = [name for name, path in audit_paths.items() if not path.exists()]
+    if missing_files:
+        raise FileNotFoundError(f"Missing DeepSeek audit output files: {missing_files}")
+
+    audit_summary = json.loads(audit_paths["audit_summary"].read_text(encoding="utf-8"))
+    effects = pd.read_csv(audit_paths["effects_long"])
+    comparison = pd.read_csv(audit_paths["mode_comparison"])
+    variation = pd.read_csv(audit_paths["effect_variation"])
+    segment_inputs = json.loads(audit_paths["segment_inputs"].read_text(encoding="utf-8"))
+    raw_files = sorted(raw_dir.glob(f"{ZEVUP_LLM_MODE}_run_*.json"))
+
+    required_effect_columns = {
+        "mode",
+        "run",
+        "status",
+        "segment_id",
+        "intervention_id",
+        "effect",
+        "reasoning",
+        "message_recommendation",
+    }
+    missing_effect_columns = sorted(required_effect_columns - set(effects.columns))
+
+    deepseek_rows = effects[effects["mode"] == ZEVUP_LLM_MODE].copy()
+    expected_live_prompts = int(audit_summary.get("live_prompts_planned", 0))
+    deepseek_runs_used = int(audit_summary.get("deepseek_runs_used", 0))
+    expected_deepseek_rows = (
+        deepseek_runs_used
+        * int(audit_summary.get("segments_returned", 0))
+        * len(audit_summary.get("interventions", []))
+    )
+
+    invalid_effect_rows = (
+        effects["effect"].isna() | ~effects["effect"].between(0.0, 1.0)
+        if "effect" in effects
+        else pd.Series([True])
+    )
+    unexpected_interventions = (
+        sorted(set(effects["intervention_id"]) - set(DEEPSEEK_INTERVENTIONS))
+        if "intervention_id" in effects
+        else []
+    )
+    missing_interventions = (
+        sorted(set(DEEPSEEK_INTERVENTIONS) - set(effects["intervention_id"]))
+        if "intervention_id" in effects
+        else list(DEEPSEEK_INTERVENTIONS)
+    )
+    max_variation_range = (
+        float(variation["range_effect"].max())
+        if not variation.empty and "range_effect" in variation
+        else 0.0
+    )
+
+    check_rows = [
+        {
+            "check": "required files exist",
+            "status": "pass",
+            "detail": ", ".join(audit_paths.keys()),
+        },
+        {
+            "check": "effects_long required columns",
+            "status": "pass" if not missing_effect_columns else "fail",
+            "detail": "all present" if not missing_effect_columns else str(missing_effect_columns),
+        },
+        {
+            "check": "effect values within [0, 1]",
+            "status": "pass" if not bool(invalid_effect_rows.any()) else "fail",
+            "detail": f"invalid rows: {int(invalid_effect_rows.sum())}",
+        },
+        {
+            "check": "intervention ids match controls",
+            "status": "pass" if not unexpected_interventions and not missing_interventions else "review",
+            "detail": (
+                f"unexpected={unexpected_interventions}; missing={missing_interventions}"
+            ),
+        },
+        {
+            "check": "DeepSeek prompts used",
+            "status": "pass"
+            if deepseek_runs_used == expected_live_prompts
+            else "review",
+            "detail": f"used={deepseek_runs_used}; planned={expected_live_prompts}",
+        },
+        {
+            "check": "DeepSeek effect row count",
+            "status": "pass"
+            if len(deepseek_rows) == expected_deepseek_rows
+            else "review",
+            "detail": f"rows={len(deepseek_rows)}; expected={expected_deepseek_rows}",
+        },
+        {
+            "check": "raw DeepSeek JSON files",
+            "status": "pass"
+            if len(raw_files) == deepseek_runs_used
+            else "review",
+            "detail": f"raw_files={len(raw_files)}; used_runs={deepseek_runs_used}",
+        },
+        {
+            "check": "repeat-run variation",
+            "status": "pass" if max_variation_range <= 0.05 else "review",
+            "detail": f"max range_effect={max_variation_range:.6f}",
+        },
+    ]
+    deepseek_output_checks = pd.DataFrame(check_rows)
+    display(deepseek_output_checks)
+
+    print(f"Audit directory: {audit_dir}")
+    print(f"Segments sent per prompt: {len(segment_inputs)}")
+    print(f"Raw DeepSeek files checked: {len(raw_files)}")
+
+    effect_preview_source = deepseek_rows if not deepseek_rows.empty else effects
+    if effect_preview_source.empty:
+        print("No effect rows available to preview.")
+    else:
+        effect_preview = (
+            effect_preview_source[
+                ["segment_id", "intervention_id", "effect", "reasoning"]
+            ]
+            .sort_values(["segment_id", "intervention_id"])
+            .head(30)
+            .copy()
+        )
+        effect_preview["effect"] = effect_preview["effect"].round(3)
+        print(
+            "DeepSeek effect preview "
+            "(falls back to off/mock rows if no DeepSeek rows were produced):"
+        )
+        display(effect_preview)
+
+    if raw_files:
+        first_raw = json.loads(raw_files[0].read_text(encoding="utf-8"))
+        raw_preview = {
+            "file": raw_files[0].name,
+            "top_level_keys": sorted(first_raw.keys()),
+            "effect_count": len(first_raw.get("effects", [])),
+            "caveat_count": len(first_raw.get("caveats", [])),
+        }
+        display(pd.DataFrame([raw_preview]))
+
+    if not effects.empty:
+        display(
+            effects.groupby(["mode", "status"], as_index=False)
+            .agg(
+                rows=("effect", "count"),
+                min_effect=("effect", "min"),
+                mean_effect=("effect", "mean"),
+                max_effect=("effect", "max"),
+            )
+            .sort_values(["mode", "status"])
+        )
+
+    if not variation.empty:
+        display(
+            variation.sort_values("range_effect", ascending=False).head(20)
+        )
+```
+
+## Missing Slices
+
+```{python}
+from IPython.display import display
+if missing_slices.empty:
+    print("All selected scenario-year slices are available.")
+else:
+    print(f"Missing selected slices: {len(missing_slices):,}")
+    display(missing_slices[["scenario", "year", "output_path"]].head(50))
+```
+
+## Reuse Outputs
+
+The selected summaries are written to:
+
+```{python}
+for filename in [
+    "generation_log.csv",
+    "scenario_summary.csv",
+    "profile_summary.csv",
+    "oa_summary.csv",
+    "calibration_summary.csv",
+]:
+    path = SUMMARY_OUTPUT_ROOT / filename
+    print(f"{filename}: {'exists' if path.exists() else 'missing'} - {path}")
+```

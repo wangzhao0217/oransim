@@ -16,6 +16,8 @@ from ..schemas.zevup import ZEVUPLLMEffect, ZEVUPLLMResponse
 DEFAULT_MODEL = "deepseek-v4-flash"
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
 ZEVUPLLMStatus = Literal["off", "mock", "fallback", "used"]
+LOW_SOCIOECONOMIC_GROUPS = {"routine_manual", "other"}
+YOUNG_AGE_GROUPS = {"16_to_24", "25_to_34"}
 
 
 @dataclass
@@ -66,6 +68,7 @@ def assess_segments(
     if not cfg["api_key_set"]:
         return ZEVUPLLMResult("fallback", _default_response(segments, interventions))
 
+    raw: dict[str, Any] | None = None
     try:
         raw = _call_deepseek(
             segments=segments,
@@ -75,7 +78,9 @@ def assess_segments(
             baseline_scenario=baseline_scenario,
             config=cfg,
         )
-        return ZEVUPLLMResult("used", ZEVUPLLMResponse(**raw), raw)
+        parsed = ZEVUPLLMResponse(**raw)
+        validate_effects(parsed, segments=segments, interventions=interventions)
+        return ZEVUPLLMResult("used", parsed, raw)
     except (
         OSError,
         json.JSONDecodeError,
@@ -84,8 +89,9 @@ def assess_segments(
         TypeError,
         ValidationError,
         TimeoutError,
+        ValueError,
     ):
-        return ZEVUPLLMResult("fallback", _default_response(segments, interventions))
+        return ZEVUPLLMResult("fallback", _default_response(segments, interventions), raw)
 
 
 def _call_deepseek(
@@ -100,7 +106,7 @@ def _call_deepseek(
     prompt = _prompt(segments, vehicle_concept, interventions, year, baseline_scenario)
     body = {
         "model": config["model"],
-        "temperature": 0.2,
+        "temperature": 0.0,
         "max_tokens": 4000,
         "response_format": {"type": "json_object"},
         "messages": [
@@ -136,6 +142,20 @@ def _prompt(
     year: int,
     baseline_scenario: str,
 ) -> str:
+    metadata = []
+    for intervention_id in interventions:
+        intervention = get_intervention(intervention_id)
+        metadata.append(
+            {
+                "intervention_id": intervention.intervention_id,
+                "name": intervention.name,
+                "description": intervention.description,
+                "default_effect": intervention.default_effect,
+                "min_effect": intervention.min_effect,
+                "max_effect": intervention.max_effect,
+                "effect_targets": intervention.effect_targets,
+            }
+        )
     return json.dumps(
         {
             "task": (
@@ -146,6 +166,32 @@ def _prompt(
             "baseline_scenario": baseline_scenario,
             "vehicle_concept": vehicle_concept,
             "interventions": interventions,
+            "intervention_metadata": metadata,
+            "effect_rules": [
+                (
+                    "Use the default_effect unless a named segment attribute gives a "
+                    "clear reason to move up or down within min_effect and max_effect."
+                ),
+                (
+                    "poor charging readiness should only increase charging_support "
+                    "above default; it should not by itself increase awareness_campaign "
+                    "or price_subsidy."
+                ),
+                (
+                    "Segments with socioeconomic_group routine_manual or other may "
+                    "receive a higher price_subsidy effect when affordability is the "
+                    "main barrier."
+                ),
+                (
+                    "Age groups 16_to_24 or 25_to_34 may receive a slightly higher "
+                    "awareness_campaign effect when awareness or willingness is the "
+                    "main barrier."
+                ),
+                (
+                    "Reasoning must cite the segment fields that justify any effect "
+                    "above default."
+                ),
+            ],
             "segments": segments,
             "required_json_shape": {
                 "effects": [
@@ -165,6 +211,58 @@ def _prompt(
         },
         ensure_ascii=False,
     )
+
+
+def validate_effects(
+    response: ZEVUPLLMResponse,
+    *,
+    segments: list[dict[str, Any]],
+    interventions: list[str],
+) -> None:
+    """Reject unsupported live-LLM effects before they reach uplift math."""
+    segment_lookup = {str(segment["segment_id"]): segment for segment in segments}
+    selected_interventions = set(interventions)
+
+    for effect in response.effects:
+        segment = segment_lookup.get(effect.segment_id)
+        if segment is None:
+            raise ValueError(f"Unknown segment_id in LLM effect: {effect.segment_id}")
+        if effect.intervention_id not in selected_interventions:
+            raise ValueError(
+                f"Unexpected intervention_id in LLM effect: {effect.intervention_id}"
+            )
+
+        intervention = get_intervention(effect.intervention_id)
+        value = float(effect.effect)
+        if not intervention.min_effect <= value <= intervention.max_effect:
+            raise ValueError(
+                f"{effect.intervention_id} effect {value} outside configured bounds "
+                f"{intervention.min_effect}-{intervention.max_effect}"
+            )
+        if value <= intervention.default_effect:
+            continue
+
+        if (
+            effect.intervention_id == "charging_support"
+            and segment.get("charging_readiness_group") != "poor"
+        ):
+            raise ValueError(
+                "charging_support above default requires poor charging_readiness_group"
+            )
+        if (
+            effect.intervention_id == "price_subsidy"
+            and segment.get("socioeconomic_group") not in LOW_SOCIOECONOMIC_GROUPS
+        ):
+            raise ValueError(
+                "price_subsidy above default requires a lower socioeconomic proxy group"
+            )
+        if (
+            effect.intervention_id == "awareness_campaign"
+            and segment.get("age_group") not in YOUNG_AGE_GROUPS
+        ):
+            raise ValueError(
+                "awareness_campaign above default requires a younger age group"
+            )
 
 
 def _default_response(

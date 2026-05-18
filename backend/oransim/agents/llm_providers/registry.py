@@ -6,6 +6,7 @@
 - ``anthropic`` — Anthropic ``/v1/messages``.
 - ``gemini`` — Google ``generateContent``.
 - ``qwen`` (alias ``qwen_dashscope``) — Qwen native ``/generation``.
+- ``ollama`` — local Ollama ``/api/chat``.
 
 Base URL and API key default to provider-appropriate values but can be
 overridden per-provider via env (``ANTHROPIC_BASE_URL`` etc.) or via the
@@ -29,6 +30,7 @@ from functools import lru_cache
 from .anthropic import AnthropicProvider
 from .base import LLMProvider
 from .gemini import GeminiProvider
+from .ollama_native import OllamaNativeProvider
 from .openai_compat import OpenAICompatProvider
 from .qwen_dashscope import QwenDashScopeProvider
 
@@ -42,6 +44,7 @@ _PROVIDER_ALIASES = {
     "qwen": "qwen_dashscope",
     "qwen_dashscope": "qwen_dashscope",
     "dashscope": "qwen_dashscope",
+    "ollama": "ollama",
 }
 
 ANTHROPIC_DEFAULT_BASE = "https://api.anthropic.com"
@@ -78,6 +81,10 @@ def _build(name: str) -> LLMProvider:
         if base:
             kwargs["base_url"] = base
         return QwenDashScopeProvider(**kwargs)
+    if name == "ollama":
+        return OllamaNativeProvider(
+            base_url=_env("OLLAMA_BASE_URL", "LLM_BASE_URL", default="http://localhost:11434"),
+        )
     raise ValueError(f"unknown LLM provider: {name}")
 
 

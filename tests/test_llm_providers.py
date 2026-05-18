@@ -32,6 +32,7 @@ def test_resolve_provider_name_aliases():
     assert resolve_provider_name("google") == "gemini"
     assert resolve_provider_name("qwen") == "qwen_dashscope"
     assert resolve_provider_name("dashscope") == "qwen_dashscope"
+    assert resolve_provider_name("ollama") == "ollama"
 
 
 def test_resolve_provider_name_case_insensitive_and_defaults(monkeypatch):
@@ -54,6 +55,7 @@ def test_get_provider_routes_by_env(monkeypatch):
     from oransim.agents.llm_providers import (
         AnthropicProvider,
         GeminiProvider,
+        OllamaNativeProvider,
         OpenAICompatProvider,
         QwenDashScopeProvider,
         get_provider,
@@ -67,6 +69,7 @@ def test_get_provider_routes_by_env(monkeypatch):
         ("anthropic", AnthropicProvider),
         ("gemini", GeminiProvider),
         ("qwen", QwenDashScopeProvider),
+        ("ollama", OllamaNativeProvider),
     ]:
         reset_provider_cache()
         monkeypatch.setenv("LLM_PROVIDER", env_val)
@@ -196,6 +199,32 @@ def test_qwen_dashscope_body_shape():
 
     headers = p._headers()
     assert headers["Authorization"] == "Bearer sk-qwen"
+
+
+# --------------------------------------------------------------- Ollama
+
+
+def test_ollama_native_body_shape():
+    from oransim.agents.llm_providers import OllamaNativeProvider
+
+    p = OllamaNativeProvider(base_url="http://localhost:11434")
+    body = p.build_body(
+        "SYS",
+        "USER",
+        model="qwen3.5:9b",
+        temperature=0.2,
+        max_tokens=700,
+    )
+
+    assert body["model"] == "qwen3.5:9b"
+    assert body["messages"] == [
+        {"role": "system", "content": "SYS"},
+        {"role": "user", "content": "USER"},
+    ]
+    assert body["stream"] is False
+    assert body["think"] is False
+    assert body["options"]["temperature"] == 0.2
+    assert body["options"]["num_predict"] == 700
 
 
 # ----------------------------------------------------- soul_llm integration

@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "interventions": {
+    "awareness_campaign": {
+      "low_acceptance_gate": {
+        "threshold": 0.55,
+        "multiplier": 1.25
+      },
+      "age_group": {
+        "16_to_24": 1.1,
+        "25_to_34": 1.1,
+        "65_plus": 0.95
+      }
+    },
+    "price_subsidy": {
+      "socioeconomic_group": {
+        "managerial_professional": 0.85,
+        "intermediate": 1.0,
+        "routine_manual": 1.25,
+        "other": 1.2
+      },
+      "low_affordability_gate": {
+        "threshold": 0.4,
+        "multiplier": 1.2
+      }
+    },
+    "charging_support": {
+      "accommodation": {
+        "whole_house": 0.9,
+        "flat": 1.2,
+        "other": 1.05
+      },
+      "tenure": {
+        "owned": 0.95,
+        "private_rented": 1.1,
+        "social_rented": 1.1,
+        "unknown": 1.0
+      },
+      "low_charging_gate": {
+        "threshold": 0.4,
+        "multiplier": 1.2
+      }
+    }
+  }
+}
+

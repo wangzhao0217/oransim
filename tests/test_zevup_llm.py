@@ -50,7 +50,7 @@ def _deepseek_payload(content: str) -> dict[str, Any]:
     return {"choices": [{"message": {"content": content}}]}
 
 
-def _valid_content(effect: float = 0.04) -> str:
+def _valid_content(effect: float = 0.025) -> str:
     return json.dumps(
         {
             "effects": [
@@ -195,10 +195,80 @@ def test_deepseek_mode_uses_live_call_payload(monkeypatch):
     assert captured["timeout"] == 30.0
     body = json.loads(request.data.decode("utf-8"))
     assert body["model"] == "deepseek-v4-flash"
+    assert body["temperature"] == 0.0
     assert body["response_format"] == {"type": "json_object"}
     messages = body["messages"]
     assert "strict JSON" in messages[0]["content"]
     assert "required_json_shape" in messages[1]["content"]
+    assert "intervention_metadata" in messages[1]["content"]
+    assert "effect_rules" in messages[1]["content"]
+
+
+def test_prompt_includes_effect_rules_and_intervention_bounds():
+    from oransim.agents.zevup_llm import _prompt
+
+    prompt = _prompt(
+        segments=_segments(),
+        vehicle_concept={
+            "concept_id": "zevup_l7e_passenger_2_seat",
+            "name": "Vehicle",
+        },
+        interventions=["awareness_campaign", "price_subsidy", "charging_support"],
+        year=2025,
+        baseline_scenario="neutral_lr_central",
+    )
+    payload = json.loads(prompt)
+
+    assert payload["effect_rules"]
+    metadata = {
+        item["intervention_id"]: item for item in payload["intervention_metadata"]
+    }
+    assert metadata["charging_support"]["default_effect"] == 0.075
+    assert metadata["charging_support"]["max_effect"] == 0.20
+    assert any("poor charging readiness" in rule for rule in payload["effect_rules"])
+    assert any("routine_manual" in rule for rule in payload["effect_rules"])
+
+
+def test_unreasonable_deepseek_effect_returns_fallback(monkeypatch):
+    from oransim.agents.zevup_llm import assess_segments
+
+    content = json.dumps(
+        {
+            "effects": [
+                {
+                    "segment_id": "scot_seg_0001",
+                    "intervention_id": "charging_support",
+                    "effect": 0.19,
+                    "reasoning": "Unsupported charging lift.",
+                    "message_recommendation": "Use charging support.",
+                }
+            ],
+            "wp1_summary": "Affordability summary.",
+            "wp5_summary": "Market uptake summary.",
+            "wp6_summary": "Messaging summary.",
+            "caveats": ["Synthetic test response."],
+        }
+    )
+
+    def fake_urlopen(request, timeout):
+        return _FakeDeepSeekResponse(_deepseek_payload(content))
+
+    monkeypatch.setenv("ZEVUP_LLM_MODE", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setattr("oransim.agents.zevup_llm.urllib.request.urlopen", fake_urlopen)
+
+    result = assess_segments(
+        segments=_segments(),
+        vehicle_concept={
+            "concept_id": "zevup_l7e_passenger_2_seat",
+            "name": "Vehicle",
+        },
+        interventions=["charging_support"],
+        year=2025,
+        baseline_scenario="neutral_lr_central",
+    )
+
+    assert result.status == "fallback"
 
 
 def test_invalid_json_content_returns_fallback(monkeypatch):

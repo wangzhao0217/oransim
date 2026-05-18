@@ -12,9 +12,7 @@ execute:
 
 ## Why This Guide Exists
 
-This file is kept at the historical path
-`studies/oransim/frugal-ev-mvp-guide.qmd`, but the current guide is for the
-**ZEV-UP Scotland segment simulator**.
+This file is kept at the historical path `studies/oransim/frugal-ev-mvp-guide.qmd`, but the current guide is for the **ZEV-UP Scotland segment simulator**.
 
 The simulator answers this practical question:
 
@@ -22,11 +20,9 @@ The simulator answers this practical question:
 > interventions such as awareness campaigns, price subsidies, and charging
 > support?
 
-It is a first ZEV-UP slice. It is useful for exploring which demographic and
-household segments may be more responsive to interventions, and for producing
-WP1, WP5, and WP6-facing summaries. It is not survey evidence, not a causal
-impact model, and not a full individual-level synthetic population for every
-person in Scotland.
+It is a first ZEV-UP slice.
+It is useful for exploring which demographic and household segments may be more responsive to interventions, and for producing WP1, WP5, and WP6-facing summaries.
+It is not survey evidence, not a causal impact model, and not a full individual-level synthetic population for every person in Scotland.
 
 ## What The Simulator Can Do
 
@@ -34,13 +30,18 @@ The current implementation can:
 
 - compare baseline readiness against post-intervention readiness;
 - evaluate three configured interventions:
-  `awareness_campaign`, `price_subsidy`, and `charging_support`;
+`awareness_campaign`, `price_subsidy`, and `charging_support`;
 - compare ZEV-UP L7e vehicle concepts defined in
-  `data/zevup/vehicle_concepts.json`;
+`data/zevup/vehicle_concepts.json`;
 - show which age, sex, education, socioeconomic proxy, household, car
-  ownership, and charging-readiness groups produce the largest weighted uplift;
+ownership, and charging-readiness groups produce the largest weighted uplift;
+- build sample-first weighted household decision-maker personas from the
+Study 3 household feasibility output;
+- preserve `oa_code` and `household_weight` through persona construction;
+- run deterministic persona-level ZEV-UP reactions and optional local Ollama
+narratives;
 - estimate how many lower socioeconomic proxy households become feasible after
-  a price subsidy;
+a price subsidy;
 - recommend high-uplift WP6 target segments and message directions;
 - run deterministically without an LLM, in mock LLM mode, or with live DeepSeek;
 - return a structured JSON response from a FastAPI endpoint.
@@ -52,14 +53,13 @@ The current implementation does **not**:
 - generate millions of individual synthetic people for Scotland;
 - create observed-person records from census microdata;
 - model direct household income, because income is represented by NS-SeC
-  socioeconomic proxy groups;
+socioeconomic proxy groups;
 - validate response effects against ZEV-UP field surveys or demo trial data;
 - simulate social media diffusion, platform spread, or peer-to-peer contagion;
 - implement Helsinki, Budapest, Istanbul, or other European markets;
 - prove demand, adoption, or policy impact.
 
-Use the output as a structured scenario analysis layer, not as definitive
-market evidence.
+Use the output as a structured scenario analysis layer, not as definitive market evidence.
 
 ## One-Page Mental Model
 
@@ -74,9 +74,606 @@ The simulator is a pipeline:
 | Comparison engine | Apply intervention effects to all segments | segment dataframe plus effects | readiness uplift and rankings |
 | API route | Expose simulator as HTTP JSON | `ZEVUPCompareRequest` | `ZEVUPCompareResponse` |
 
-The important point: **the same API route is used for no-LLM, mock, and live
-DeepSeek runs**. The difference is the environment mode and, optionally, the
-`use_llm` request flag.
+The important point: **the same API route is used for no-LLM, mock, and live DeepSeek runs**.
+The difference is the environment mode and, optionally, the `use_llm` request flag.
+
+## From Places To Households To People
+
+The persona extension links the three Study 3 layers without changing their scientific boundary:
+
+```text
+Paper 1: Output Area structural feasibility
+Paper 2: weighted household feasibility within OAs
+Oransim: weighted household decision-maker personas and ZEV-UP what-if reactions
+```
+
+The unit is a **weighted household decision-maker persona**.
+One persona is created from one Paper 2 household row; `household_weight` is preserved and is not expanded into duplicate households.
+This keeps the model aligned with the weighted synthetic population rather than pretending to observe millions of individual people.
+
+The persona layer preserves `oa_code`, attaches OA-level Census 2022 age/sex/education categories through deterministic imputation, and carries the Paper 2 household gates:
+
+```text
+AP_i
+G_it
+A_it
+trip_suit_weight
+feasible_h
+adopts
+```
+
+It also adds an Oransim-only `acceptance_gate_h`, which represents awareness, trust, and perceived suitability.
+This gate is configured in `data/zevup/persona_acceptance_config.json`; intervention modifiers are configured in `data/zevup/persona_effect_modifiers.json`.
+
+### What Was Added
+
+The current persona implementation adds these pieces:
+
+| Layer | File | Purpose |
+|---|---|---|
+| Upstream Paper 2 slice generator | `../microsimulation/scripts/generate_household_feasibility_slice.py` | Generate one household feasibility parquet for a requested scenario/year |
+| Scenario manifest | `data/zevup/scenario_slices.json` | Declare which Paper 2 slices Oransim may consume |
+| Persona builder | `backend/oransim/data/zevup_personas.py` | Build one weighted decision-maker persona per Paper 2 household row |
+| Persona reaction model | `backend/oransim/agents/zevup_persona_reactions.py` | Apply deterministic gate-aware ZEV-UP interventions |
+| Persona narratives | `backend/oransim/agents/zevup_persona_narratives.py` | Attach template or Ollama-generated narrative fields |
+| Native Ollama provider | `backend/oransim/agents/llm_providers/ollama_native.py` | Use local Ollama `/api/chat` with `think:false` |
+| Sample runner | `backend/scripts/run_zevup_persona_sample.py` | Build, score, narrate, and write one timestamped sample run |
+
+The design is intentionally sample-first.
+It can score the full in-memory household persona table, but writes a deterministic representative sample by default.
+Full production export should be done only after checking the sample outputs.
+
+### Gate-Aware Persona Reactions
+
+The persona reaction model is deterministic.
+It maps interventions to gates:
+
+| Intervention | Gate changed | Interpretation |
+|---|---|---|
+| `awareness_campaign` | `acceptance_gate_h` | awareness, trust, perceived suitability |
+| `price_subsidy` | `A_it` | affordability |
+| `charging_support` | `G_it` | charging feasibility/confidence |
+
+For each selected intervention, the model applies bounded diminishing returns:
+
+```text
+new_gate = old_gate + (1 - old_gate) * effect
+gate_ratio = new_gate / old_gate
+post_zevup_feasible_h = baseline_feasible_h * product(gate_ratios)
+```
+
+The output is a downstream ZEV-UP what-if surface.
+It does not feed back into Paper 1 or Paper 2, and it is not behavioural validation.
+
+### Supported Persona Slices
+
+The supported scenario/year manifest is:
+
+```text
+data/zevup/scenario_slices.json
+```
+
+Initial slices are:
+
+| Scenario | Year | Status |
+|---|---:|---|
+| `neutral_lr_central` | 2025 | available from `output/microsimulation/household_feasibility.parquet` |
+| `steep_lr_high` | 2040 | requires upstream Paper 2 generation |
+
+Generate the 2040 slice before running Oransim on it:
+
+```bash
+python -m studies.microsimulation.scripts.generate_household_feasibility_slice \
+  --scenario steep_lr_high \
+  --year 2040 \
+  --output output/microsimulation/scenarios/steep_lr_high_2040/household_feasibility.parquet
+```
+
+```{python}
+import os
+
+import pandas as pd
+
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+import matplotlib.pyplot as plt
+
+# Read the parquet file into a DataFrame (adjusting for Quarto's working directory)
+file_path = "../../output/microsimulation/scenarios/steep_lr_high_2040/household_feasibility.parquet"
+df = pd.read_parquet(file_path)
+
+# View the first few rows
+print(df.head())
+
+adopters = df.loc[df["adopts"] == 1].copy()
+print(f"Adopted household rows: {len(adopters):,}")
+print(
+    adopters[
+        [
+            "household_id",
+            "oa_code",
+            "nssec_group",
+            "accommodation",
+            "household_size",
+            "car_ownership",
+            "tenure",
+            "feasible_h",
+        ]
+    ]
+    .head(20)
+    .to_string(index=False)
+)
+
+profile_cols = [
+    "nssec_group",
+    "accommodation",
+    "household_size",
+    "car_ownership",
+    "tenure",
+]
+
+fig, axes = plt.subplots(
+    nrows=len(profile_cols),
+    ncols=1,
+    figsize=(10, 14),
+    constrained_layout=True,
+)
+
+for ax, col in zip(axes, profile_cols):
+    summary = (
+        df.assign(adopted_weight=df["adopts"] * df["household_weight"])
+        .groupby(col, dropna=False)
+        .agg(
+            total_weight=("household_weight", "sum"),
+            adopted_weight=("adopted_weight", "sum"),
+        )
+        .assign(adoption_share=lambda x: x["adopted_weight"] / x["total_weight"])
+        .sort_values("adoption_share")
+    )
+
+    ax.barh(summary.index.astype(str), summary["adoption_share"] * 100)
+    ax.set_title(f"Weighted adoption share by {col}")
+    ax.set_xlabel("Households with adopts = 1 (%)")
+    ax.set_ylabel("")
+
+plt.show()
+
+```
+
+Then run one Oransim persona sample:
+
+```bash
+PYTHONPATH=studies/oransim/backend python studies/oransim/backend/scripts/run_zevup_persona_sample.py \
+  --scenario neutral_lr_central \
+  --year 2025 \
+  --sample-size 10000 \
+  --narrative-limit 100
+```
+
+Check the latest run produced by the command:
+
+```{python}
+import json
+from pathlib import Path
+
+import pandas as pd
+
+run_roots = [
+    Path("output/zevup_persona_runs"),
+    Path("studies/oransim/output/zevup_persona_runs"),
+]
+run_root = next((path for path in run_roots if path.exists()), None)
+
+if run_root is None:
+    print("No ZEV-UP persona run directory found. Run the command above first.")
+else:
+    run_dirs = sorted(path for path in run_root.iterdir() if path.is_dir())
+    if not run_dirs:
+        print("No ZEV-UP persona runs found. Run the command above first.")
+    else:
+        run_dir = run_dirs[-1]
+        summary = json.loads((run_dir / "summary.json").read_text())
+        personas = pd.read_parquet(run_dir / "personas_sample.parquet")
+        reactions = pd.read_parquet(run_dir / "reactions_sample.parquet")
+        narrative_path = run_dir / "narratives_sample.jsonl"
+        narrative_rows = [
+            json.loads(line)
+            for line in narrative_path.read_text().splitlines()
+            if line.strip()
+        ]
+
+        print(f"Latest run: {run_dir}")
+        print(f"Personas: {len(personas):,}")
+        print(f"Reactions: {len(reactions):,}")
+        print(f"Narratives: {len(narrative_rows):,}")
+        print()
+        print(json.dumps(summary, indent=2, sort_keys=True))
+        print()
+        print("Reaction classes:")
+        print(reactions["reaction_class"].value_counts().to_string())
+        print()
+        print("Main barriers:")
+        print(reactions["main_barrier"].value_counts().to_string())
+        print()
+        print("Sample moved households:")
+        moved = reactions.loc[
+            reactions["reaction_class"] == "moved_by_policy",
+            [
+                "household_id",
+                "nssec_group",
+                "car_ownership",
+                "tenure",
+                "feasible_h",
+                "post_zevup_feasible_h",
+                "zevup_uplift",
+                "best_intervention",
+            ],
+        ]
+        print(moved.head(10).to_string(index=False))
+```
+
+Run directories are timestamped under:
+
+```text
+output/zevup_persona_runs/
+```
+
+Each run writes:
+
+```text
+personas_sample.parquet
+reactions_sample.parquet
+narratives_sample.jsonl
+run_config.json
+summary.json
+config_snapshots/
+```
+
+### Step-By-Step Persona Runbook
+
+Use these steps to reproduce the work and check the results.
+
+#### 1. Start In The Oransim Directory
+
+```bash
+cd /workspaces/EV_modelling/studies/oransim
+```
+
+#### 2. Run The Focused Tests
+
+These tests check the persona builder, reaction model, narrative layer, native Ollama provider shape, and sample runner.
+
+```bash
+PYTHONPATH=backend pytest -q \
+  tests/test_zevup_personas.py \
+  tests/test_zevup_persona_reactions.py \
+  tests/test_zevup_persona_narratives.py \
+  tests/test_zevup_persona_sample_script.py \
+  tests/test_llm_providers.py
+```
+
+Expected result:
+
+```text
+20 passed
+```
+
+#### 3. Run A Small Deterministic Persona Sample
+
+Start with a tiny sample before running thousands of rows:
+
+```bash
+PYTHONPATH=backend python backend/scripts/run_zevup_persona_sample.py \
+  --scenario neutral_lr_central \
+  --year 2025 \
+  --sample-size 10 \
+  --narrative-limit 2
+```
+
+Expected result:
+
+```text
+Wrote ZEV-UP persona sample run to output/zevup_persona_runs/<timestamp>
+```
+
+Set the run directory for the following checks:
+
+```bash
+export RUN_DIR=$(find output/zevup_persona_runs -mindepth 1 -maxdepth 1 -type d | sort | tail -1)
+echo "$RUN_DIR"
+```
+
+#### 4. Check The Run Files Exist
+
+```bash
+(cd "$RUN_DIR" && find . -maxdepth 2 -type f | sort)
+```
+
+You should see:
+
+```text
+./config_snapshots/interventions.json
+./config_snapshots/persona_acceptance_config.json
+./config_snapshots/persona_effect_modifiers.json
+./config_snapshots/scenario_slices.json
+./narratives_sample.jsonl
+./personas_sample.parquet
+./reactions_sample.parquet
+./run_config.json
+./summary.json
+```
+
+#### 5. Read The Summary
+
+```{python}
+import json
+import os
+from pathlib import Path
+
+# Find the most recent run directory instead of relying on bash environment variables
+run_dirs = sorted(Path("output/zevup_persona_runs").glob("*"))
+run_dir = run_dirs[-1]
+
+summary = json.loads((run_dir / "summary.json").read_text())
+print(json.dumps(summary, indent=2, sort_keys=True))
+```
+
+Key fields to check:
+
+| Field | Meaning |
+|---|---|
+| `baseline_readiness` | Weighted mean readiness before ZEV-UP interventions |
+| `post_zevup_readiness` | Weighted mean readiness after selected interventions |
+| `overall_uplift` | Difference between post and baseline readiness |
+| `reaction_class_counts` | Count of sampled personas by response class |
+| `main_barrier_counts` | Count of sampled personas by limiting barrier |
+| `narratives_written` | Number of rows with narrative text |
+
+#### 6. Check Persona Structure
+
+```{python}
+import os
+from pathlib import Path
+import pandas as pd
+
+# Find the most recent run directory instead of relying on bash environment variables
+run_dirs = sorted(Path("output/zevup_persona_runs").glob("*"))
+run_dir = run_dirs[-1]
+
+personas = pd.read_parquet(run_dir / "personas_sample.parquet")
+cols = [
+    "persona_id",
+    "oa_code",
+    "household_id",
+    "household_weight",
+    "age_group",
+    "sex",
+    "education_group",
+    "feasible_h",
+    "acceptance_gate_h",
+]
+print(personas[cols].head(10).to_string(index=False))
+print()
+print("rows:", len(personas))
+print("oa_code missing:", int(personas["oa_code"].isna().sum()))
+print("household_weight total:", round(float(personas["household_weight"].sum()), 6))
+print("duplicate persona_id:", int(personas["persona_id"].duplicated().sum()))
+```
+
+What to check:
+
+- `oa_code` is present;
+- `household_weight` is present;
+- `persona_id` is unique;
+- age, sex, and education fields are attached;
+- rows are sampled weighted personas, not expanded individual people.
+
+#### 7. Check Reaction Results
+
+```{python}
+import os
+from pathlib import Path
+import pandas as pd
+
+# Find the most recent run directory instead of relying on bash environment variables
+run_dirs = sorted(Path("output/zevup_persona_runs").glob("*"))
+run_dir = run_dirs[-1]
+
+reactions = pd.read_parquet(run_dir / "reactions_sample.parquet")
+cols = [
+    "persona_id",
+    "reaction_class",
+    "main_barrier",
+    "best_intervention",
+    "feasible_h",
+    "post_zevup_feasible_h",
+    "zevup_uplift",
+]
+print(reactions[cols].head(10).to_string(index=False))
+print()
+print(reactions["reaction_class"].value_counts().to_string())
+print()
+print(reactions["main_barrier"].value_counts().to_string())
+```
+
+What to check:
+
+- `post_zevup_feasible_h` is the deterministic post-policy readiness;
+- `zevup_uplift` is non-negative for supported interventions;
+- `reaction_class` uses the expected labels:
+`already_ready`, `moved_by_policy`, `low_relevance`, `near_threshold_not_moved`, or `still_blocked`;
+- `best_intervention` should align with the lowest actionable gate.
+
+#### 8. Check Narrative Output
+
+```{python}
+import json
+from pathlib import Path
+
+# Find the most recent run directory instead of relying on bash environment variables
+run_dirs = sorted(Path("output/zevup_persona_runs").glob("*"))
+run_dir = run_dirs[-1]
+
+path = run_dir / "narratives_sample.jsonl"
+rows = [json.loads(line) for line in path.read_text().splitlines()]
+for row in rows:
+    print(row["status"], row["persona_id"])
+    print(json.dumps(row["narrative"], indent=2, ensure_ascii=False))
+    print()
+```
+
+Without `--use-ollama`, expected `status` is `template`.
+With `--use-ollama`, expected `status` is `ollama_generated` or `ollama_cached`.
+
+#### 9. Run The Default Sample Size
+
+After the 10-row sample looks right, run the agreed v1 sample size:
+
+```bash
+PYTHONPATH=backend python backend/scripts/run_zevup_persona_sample.py \
+  --scenario neutral_lr_central \
+  --year 2025 \
+  --sample-size 10000 \
+  --narrative-limit 100
+```
+
+The same checks above apply to this larger sample.
+
+#### 10. Check The 2040 Upstream Boundary
+
+The `2040 steep_lr_high` persona run should fail clearly until the upstream Paper 2 household feasibility slice exists:
+
+```bash
+PYTHONPATH=backend python backend/scripts/run_zevup_persona_sample.py \
+  --scenario steep_lr_high \
+  --year 2040 \
+  --sample-size 10 \
+  --narrative-limit 2
+```
+
+Expected result before generating the slice:
+
+```text
+Household feasibility slice is not available:
+.../output/microsimulation/scenarios/steep_lr_high_2040/household_feasibility.parquet
+
+Generate it first with:
+python -m studies.microsimulation.scripts.generate_household_feasibility_slice ...
+```
+
+Generate the 2040 slice from the repository root when you are ready:
+
+```bash
+cd /workspaces/EV_modelling
+
+python -m studies.microsimulation.scripts.generate_household_feasibility_slice \
+  --scenario steep_lr_high \
+  --year 2040 \
+  --output output/microsimulation/scenarios/steep_lr_high_2040/household_feasibility.parquet
+```
+
+Then return to Oransim and rerun the 2040 sample:
+
+```bash
+cd /workspaces/EV_modelling/studies/oransim
+
+PYTHONPATH=backend python backend/scripts/run_zevup_persona_sample.py \
+  --scenario steep_lr_high \
+  --year 2040 \
+  --sample-size 10 \
+  --narrative-limit 2
+```
+
+### Optional Local Ollama Narratives
+
+Numeric scoring is always deterministic.
+Ollama can be used only for narrative fields such as `persona_reaction_text`, `hesitation_explanation`, `message_hook`, and `policy_note`.
+
+Use Ollama through Oransim's native Ollama provider:
+
+```bash
+export LLM_PROVIDER=ollama
+export LLM_BASE_URL=http://host.docker.internal:11434
+export LLM_MODEL=qwen3.5:9b
+
+PYTHONPATH=studies/oransim/backend python studies/oransim/backend/scripts/run_zevup_persona_sample.py \
+  --scenario neutral_lr_central \
+  --year 2025 \
+  --sample-size 10 \
+  --narrative-limit 2 \
+  --use-ollama
+```
+
+This assumes the Ollama CLI is installed and the Ollama server is running in the same environment where the command is executed.
+If `ollama list` returns `command not found`, the CLI is not installed in that container or shell.
+If `curl http://localhost:11434/api/tags` returns `connection refused`, no Ollama server is listening on `localhost` from inside that environment.
+The `PYTHONPATH=backend python backend/scripts/...` form assumes the current working directory is `studies/oransim`.
+From the repository root, use `PYTHONPATH=studies/oransim/backend python studies/oransim/backend/scripts/run_zevup_persona_sample.py` instead.
+
+When Ollama runs on the host and Oransim runs inside a devcontainer, use the host bridge URL instead:
+
+```bash
+curl http://host.docker.internal:11434/api/tags
+
+export LLM_PROVIDER=ollama
+export LLM_BASE_URL=http://host.docker.internal:11434
+export LLM_MODEL=qwen3.5:9b
+```
+
+If `curl http://host.docker.internal:11434/api/tags` works but Python reports `Temporary failure in name resolution`, the issue is container DNS rather than Ollama.
+In that case, inspect the bridge address with:
+
+```bash
+curl -v http://host.docker.internal:11434/api/tags
+```
+
+Then set `LLM_BASE_URL` to the reported IP address, for example:
+
+```bash
+export LLM_BASE_URL=http://192.168.65.254:11434
+```
+
+The bridge IP is host- and runtime-specific, so do not treat this example as a portable configuration value.
+
+If `--use-ollama` is passed and Ollama is unavailable, the script fails with a setup message unless `--allow-template-fallback` is also passed.
+
+Check the Ollama narrative statuses:
+
+```{python}
+import json
+from pathlib import Path
+
+# Find the most recent run directory instead of relying on bash environment variables
+run_dirs = sorted(Path("output/zevup_persona_runs").glob("*"))
+run_dir = run_dirs[-1]
+
+rows = [
+    json.loads(line)
+    for line in (run_dir / "narratives_sample.jsonl").read_text().splitlines()
+]
+print("run_dir:", run_dir)
+for row in rows:
+    print(row["status"], row["persona_id"])
+```
+
+Expected status for a first live Ollama run is `ollama_generated`.
+A repeated run with the same persona, model, interventions, and config hash may show `ollama_cached`.
+
+### Later Paper Update Notes
+
+Do not update `paper/study3_multiscale_nature_paper.qmd` until persona outputs have been generated and checked.
+The later paper update should:
+
+- replace the segment-only Oransim description with the weighted household
+decision-maker persona layer;
+- describe OA-level Census-conditioned age/sex/education imputation;
+- state that personas are weighted synthetic representatives, not observed
+people;
+- clarify that Ollama is optional, local, narrative-only, and not part of
+numeric scoring;
+- present Oransim outputs as downstream ZEV-UP what-if scenarios, not feedback
+into Paper 1 or Paper 2;
+- report residual risks: imputed demographics, fixed 2022 population for 2040,
+unvalidated intervention effect sizes, and narrative text as interpretation rather than evidence.
 
 ## Fastest Working Path
 
@@ -88,8 +685,9 @@ If your prompt looks like this:
 (base) root@...:/workspaces/EV_modelling/studies/oransim#
 ```
 
-you are using **Bash**, not PowerShell. Use the Bash commands first. The
-PowerShell examples are for Windows terminals.
+you are using **Bash**, not PowerShell.
+Use the Bash commands first.
+The PowerShell examples are for Windows terminals.
 
 Purpose: build a few Scotland weighted segment cells directly from Python.
 
@@ -108,13 +706,25 @@ $env:PYTHONPATH = "backend"
 python -c "from oransim.data.zevup_segments import build_scotland_segments; df=build_scotland_segments(year=2025, scenario='neutral_lr_central', max_segments=5); print(df[['segment_id','age_group','socioeconomic_group','household_weight','baseline_feasible_share']].to_string(index=False))"
 ```
 
-Expected output: five rows with `segment_id`, demographic labels,
-`household_weight`, and `baseline_feasible_share`.
+```{python}
+import sys
+sys.path.insert(0, "backend")
+
+from oransim.data.zevup_segments import build_scotland_segments
+
+df = build_scotland_segments(
+    year=2025, 
+    scenario='neutral_lr_central', 
+    max_segments=5
+)
+print(df[['segment_id', 'age_group', 'socioeconomic_group', 'household_weight', 'baseline_feasible_share']].to_string(index=False))
+```
+
+Expected output: five rows with `segment_id`, demographic labels, `household_weight`, and `baseline_feasible_share`.
 
 Purpose: run the comparison engine without starting the API server.
 
-Input: the same Scotland segment source data plus the default ZEV-UP vehicle and
-interventions.
+Input: the same Scotland segment source data plus the default ZEV-UP vehicle and interventions.
 
 Command for Bash:
 
@@ -200,17 +810,15 @@ The segment builder currently checks these census tables:
 | `UV405 - Car or van availability.csv` | required source coverage for car availability |
 | `outputarea2022_usualresidentpopulation.csv` | required source coverage for 2022 population context |
 
-Some required files are checked for availability before building segments even
-when the first slice does not yet use every column directly. This is intentional
-source-manifest validation.
+Some required files are checked for availability before building segments even when the first slice does not yet use every column directly.
+This is intentional source-manifest validation.
 
 ## Population Methodology
 
-The repo does **not** currently generate a full individual population for
-Scotland.
+The repo does **not** currently generate a full individual population for Scotland.
 
-It builds **census-constrained weighted segment cells**. A segment cell is a
-row such as:
+It builds **census-constrained weighted segment cells**.
+A segment cell is a row such as:
 
 ```text
 age_group = 35_to_49
@@ -227,8 +835,8 @@ household_weight = 1234.5
 baseline_feasible_share = 0.27
 ```
 
-That row represents a weighted group of households/persons. It is not one real
-person and not one generated individual.
+That row represents a weighted group of households/persons.
+It is not one real person and not one generated individual.
 
 ### How `build_scotland_segments()` Works
 
@@ -246,17 +854,16 @@ person and not one generated individual.
    - charging readiness.
 5. Computes `baseline_feasible_share` from weighted household feasibility.
 6. Reads census-derived age, sex, education, household type, and dependent
-   children shares.
+children shares.
 7. Cross-joins household feasibility groups with demographic and household type
-   shares.
+shares.
 8. Filters impossible household combinations, for example one-person households
-   must have `household_size = one_person`.
+must have `household_size = one_person`.
 9. Allocates household and person weights across segment cells.
 10. Assigns segment IDs such as `scot_seg_0001`.
 
-The tests check that the full segment table conserves household weight against
-the source household feasibility data. That means the segment rows are weighted
-to the source, but they are still weighted cells, not individual people.
+The tests check that the full segment table conserves household weight against the source household feasibility data.
+That means the segment rows are weighted to the source, but they are still weighted cells, not individual people.
 
 ## Intervention Methodology
 
@@ -268,16 +875,16 @@ The allowed interventions are configured in `data/zevup/interventions.json`.
 | `price_subsidy` | Improves affordability | larger affordability/readiness uplift |
 | `charging_support` | Improves charging confidence/readiness | charging-constrained segment uplift |
 
-The comparison engine applies interventions sequentially. For each segment:
+The comparison engine applies interventions sequentially.
+For each segment:
 
 ```text
 lift = (1 - current_feasible_share) * intervention_effect
 new_feasible_share = current_feasible_share + lift
 ```
 
-This keeps the post-intervention share bounded between 0 and 1. A segment that
-is already highly feasible has less room to improve than a segment with low
-baseline feasibility.
+This keeps the post-intervention share bounded between 0 and 1.
+A segment that is already highly feasible has less room to improve than a segment with low baseline feasibility.
 
 The main aggregate metrics are:
 
@@ -290,8 +897,8 @@ The main aggregate metrics are:
 
 ## LLM, Mock, And No-LLM Modes
 
-The three modes use the same endpoint and almost the same request. They differ
-in how intervention effects and message recommendations are produced.
+The three modes use the same endpoint and almost the same request.
+They differ in how intervention effects and message recommendations are produced.
 
 | Mode | Env setting | Calls DeepSeek? | Effect source | Best use |
 |---|---|---:|---|---|
@@ -309,18 +916,127 @@ The request also has `use_llm`.
 | `true` | `deepseek` with API key | calls DeepSeek and returns `llm_status = "used"` if successful |
 | `true` | `deepseek` without key or failed call | uses defaults and returns `llm_status = "fallback"` |
 
-DeepSeek does not create the Scotland population. It only receives selected
-segment summaries, the vehicle concept, selected interventions, year, and
-scenario. It returns structured effect values, reasoning, WP summaries, caveats,
-and message recommendations.
+DeepSeek does not create the Scotland population.
+It only receives selected segment summaries, the vehicle concept, selected interventions, year, and scenario.
+It returns structured effect values, reasoning, WP summaries, caveats, and message recommendations.
 
 `segment_limit` has two effects:
 
 - it limits how many top-weighted segments are sent to the LLM helper;
 - it limits how many segment rows are returned in `segment_results`.
 
-Aggregate readiness is still calculated over the full segment table. Segments
-without an LLM-specific effect use the configured default intervention effect.
+Aggregate readiness is still calculated over the full segment table.
+Segments without an LLM-specific effect use the configured default intervention effect.
+
+## DeepSeek Effect Audit Plan
+
+DeepSeek effects should be treated as exploratory assumptions unless they pass a repeatability and rule-consistency audit.
+For publication-quality reporting, use this hierarchy:
+
+| Role | Mode | Interpretation |
+|---|---|---|
+| Main result | `ZEVUP_LLM_MODE=off` | deterministic configured defaults |
+| Robustness check | `ZEVUP_LLM_MODE=mock` | deterministic rule-based sensitivity |
+| Exploratory scenario | `ZEVUP_LLM_MODE=deepseek` | LLM-assisted effect assumptions requiring audit |
+
+The audit workflow is:
+
+1. run the same segments 5-10 times in DeepSeek mode and measure effect variation;
+2. compare DeepSeek effects against `off` and `mock`;
+3. save raw DeepSeek JSON responses under `raw/`;
+4. use `temperature = 0.0` for DeepSeek requests;
+5. include explicit effect rules and intervention min/default/max values in the prompt;
+6. reject live effects that exceed configured bounds or increase the wrong intervention for the observed segment attributes.
+
+Run the audit from the Oransim directory:
+
+```bash
+cd /workspaces/EV_modelling/studies/oransim
+
+PYTHONPATH=backend python backend/scripts/audit_zevup_llm_effects.py \
+  --year 2025 \
+  --scenario neutral_lr_central \
+  --segment-limit 5 \
+  --runs 10
+```
+
+The script writes timestamped artifacts under:
+
+```text
+output/zevup_llm_audits/
+```
+
+Each audit run writes:
+
+```text
+audit_summary.json
+effects_long.csv
+mode_comparison.csv
+effect_variation.csv
+segment_inputs.json
+raw/deepseek_run_XX.json
+```
+
+Read the latest audit:
+
+```{python}
+import json
+from pathlib import Path
+
+import pandas as pd
+
+audit_root = Path("output/zevup_llm_audits")
+
+if not audit_root.exists():
+    print("No LLM audit directory found. Run the audit command above first.")
+else:
+    audit_dirs = sorted(path for path in audit_root.iterdir() if path.is_dir())
+    if not audit_dirs:
+        print("No LLM audit runs found. Run the audit command above first.")
+    else:
+        audit_dir = audit_dirs[-1]
+        summary = json.loads((audit_dir / "audit_summary.json").read_text())
+        comparison = pd.read_csv(audit_dir / "mode_comparison.csv")
+        variation = pd.read_csv(audit_dir / "effect_variation.csv")
+
+        print(f"Latest audit: {audit_dir}")
+        print(f"Segments: {summary['segments_returned']}")
+        print(f"DeepSeek key available: {summary['deepseek_key_available']}")
+        print(f"DeepSeek runs used: {summary['deepseek_runs_used']}")
+        print(f"DeepSeek runs skipped: {summary['deepseek_runs_skipped']}")
+        print()
+        print("Mode comparison:")
+        print(comparison.head(15).to_string(index=False))
+        print()
+        print("DeepSeek variation:")
+        print(variation.head(15).to_string(index=False))
+```
+
+Local verification on 2026-05-18 used this smoke command:
+
+```bash
+PYTHONPATH=backend python backend/scripts/audit_zevup_llm_effects.py \
+  --year 2025 \
+  --scenario neutral_lr_central \
+  --segment-limit 5 \
+  --runs 2
+```
+
+Observed local result:
+
+```text
+Wrote ZEV-UP LLM effect audit to output/zevup_llm_audits/20260518T130547Z
+segments_returned: 5
+deepseek_key_available: false
+deepseek_runs_used: 0
+deepseek_runs_skipped: 2
+effects_long.csv rows: 30
+effect_variation.csv rows: 0
+```
+
+Because `DEEPSEEK_API_KEY` was not available in the sandbox, the local run generated the `off` and `mock` comparison artifacts and skipped live DeepSeek repetitions.
+The comparison table showed configured defaults in `off` mode and deterministic mock increments, for example `charging_support` increasing from `0.075` to `0.120` for poor-charging segments.
+Run the same audit with a valid DeepSeek key to populate `raw/deepseek_run_XX.json` and `effect_variation.csv`.
 
 ## API Request And Response
 
@@ -361,9 +1077,9 @@ The response schema is `ZEVUPCompareResponse`:
 This guide supports two shells:
 
 - **Bash**: Linux, macOS, WSL, Docker, and this container. Environment variables
-  use `export NAME=value` or `NAME=value command`.
+use `export NAME=value` or `NAME=value command`.
 - **PowerShell**: Windows PowerShell. Environment variables use
-  `$env:NAME = "value"`.
+`$env:NAME = "value"`.
 
 Your current prompt shows Bash, so use the Bash commands.
 
@@ -371,6 +1087,9 @@ Bash starting folder:
 
 ```bash
 cd /workspaces/EV_modelling/studies/oransim
+set -a
+source .env
+set +a
 ```
 
 PowerShell starting folder:
@@ -403,13 +1122,12 @@ Get-ChildItem backend\oransim\data\zevup_segments.py
 Get-ChildItem data\zevup\interventions.json
 ```
 
-Expected output: all three files are shown. If one is missing, you are in the
-wrong folder or the ZEV-UP files are incomplete.
+Expected output: all three files are shown.
+If one is missing, you are in the wrong folder or the ZEV-UP files are incomplete.
 
 ### Step 2: Check Required Scotland Source Files
 
-Purpose: verify that the census and Study 3 source files required by the segment
-builder are present.
+Purpose: verify that the census and Study 3 source files required by the segment builder are present.
 
 Input: configured paths in `data/zevup/markets.json`.
 
@@ -426,14 +1144,12 @@ $env:PYTHONPATH = "backend"
 python -c "from oransim.data.zevup_segments import required_scotland_source_paths; [print(('OK ' if p.exists() else 'MISS ') + str(p)) for p in required_scotland_source_paths()]"
 ```
 
-Expected output: each required path starts with `OK`. If a path starts with
-`MISS`, regenerate or copy the required census cleanup or Study 3 output before
-running the simulator.
+Expected output: each required path starts with `OK`.
+If a path starts with `MISS`, regenerate or copy the required census cleanup or Study 3 output before running the simulator.
 
 ### Step 3: Choose Runtime Mode
 
-Purpose: choose how intervention effects and message recommendations are
-generated.
+Purpose: choose how intervention effects and message recommendations are generated.
 
 Input: your desired mode.
 
@@ -487,11 +1203,11 @@ $env:DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 $env:DEEPSEEK_MODEL = "deepseek-v4-flash"
 ```
 
-Expected output: PowerShell prints nothing. The variables are set in the current
-terminal session.
+Expected output: PowerShell prints nothing.
+The variables are set in the current terminal session.
 
-Do not put a real API key in this guide or commit one to the repository. If you
-only need to check whether a key is set, run:
+Do not put a real API key in this guide or commit one to the repository.
+If you only need to check whether a key is set, run:
 
 ```bash
 test -n "$DEEPSEEK_API_KEY" && echo true || echo false
@@ -515,8 +1231,9 @@ Command:
 python -m uvicorn oransim.api:app --host 127.0.0.1 --port 8000
 ```
 
-Expected output: uvicorn starts and waits for requests. Leave this terminal
-open. Open a second PowerShell terminal for the API calls.
+Expected output: uvicorn starts and waits for requests.
+Leave this terminal open.
+Open a second PowerShell terminal for the API calls.
 
 ### Step 5: Check The Server Is Alive
 
@@ -542,16 +1259,13 @@ Expected output:
 status : ok
 ```
 
-If the request fails, the server is not running, the port is different, or a
-proxy setting is interfering.
+If the request fails, the server is not running, the port is different, or a proxy setting is interfering.
 
 ### Step 6: Run A No-LLM Scenario
 
-Purpose: get a deterministic baseline result using configured intervention
-defaults.
+Purpose: get a deterministic baseline result using configured intervention defaults.
 
-Input: selected year, scenario, vehicle concept, interventions, and
-`use_llm = $false`.
+Input: selected year, scenario, vehicle concept, interventions, and `use_llm = $false`.
 
 Command for Bash:
 
@@ -593,11 +1307,10 @@ Expected output: JSON with `llm_status` equal to `off`.
 
 ### Step 7: Run The Same Scenario With Mock Or DeepSeek
 
-Purpose: compare how the qualitative effect layer changes effects, messages,
-and WP summaries.
+Purpose: compare how the qualitative effect layer changes effects, messages, and WP summaries.
 
-Input: same request as Step 6, but set `use_llm = $true`. The actual behavior
-depends on `ZEVUP_LLM_MODE`.
+Input: same request as Step 6, but set `use_llm = $true`.
+The actual behavior depends on `ZEVUP_LLM_MODE`.
 
 Command for Bash:
 
@@ -645,13 +1358,12 @@ Expected output:
 - `fallback` if DeepSeek mode is selected but the key/call fails;
 - `off` if `ZEVUP_LLM_MODE = "off"`.
 
-The endpoint and request shape are the same. The main difference is the effect
-source used inside `zevup_llm.py`.
+The endpoint and request shape are the same.
+The main difference is the effect source used inside `zevup_llm.py`.
 
 ### Step 8: Inspect Which Groups Changed Most
 
-Purpose: answer "How do age, education, household, and socioeconomic groups
-react differently?"
+Purpose: answer "How do age, education, household, and socioeconomic groups react differently?"
 
 Input: `$result` from Step 6 or Step 7.
 
@@ -664,16 +1376,13 @@ $result.demographic_rankings.socioeconomic_group | Format-Table
 $result.demographic_rankings.household_type | Format-Table
 ```
 
-Expected output: ranked tables with `value`, `weighted_household_uplift`, and
-`household_weight`.
+Expected output: ranked tables with `value`, `weighted_household_uplift`, and `household_weight`.
 
-Read these as "which weighted group contributes most to total uplift", not as
-individual survey responses.
+Read these as "which weighted group contributes most to total uplift", not as individual survey responses.
 
 ### Step 9: Inspect Price Subsidy Impact
 
-Purpose: answer "How many lower-income proxy households become feasible after a
-subsidy?"
+Purpose: answer "How many lower-income proxy households become feasible after a subsidy?"
 
 Input: a result where `price_subsidy` was included.
 
@@ -689,12 +1398,12 @@ Expected output: a summary with:
 - `weighted_households_made_feasible_proxy`;
 - `note`.
 
-This is a lower socioeconomic proxy result. It is not direct income modelling.
+This is a lower socioeconomic proxy result.
+It is not direct income modelling.
 
 ### Step 10: Inspect WP6 Target Messages
 
-Purpose: answer "Which exact segments should WP6 target with different
-messages?"
+Purpose: answer "Which exact segments should WP6 target with different messages?"
 
 Input: `$result.segment_results`.
 
@@ -714,8 +1423,8 @@ $result.segment_results |
 ```
 
 Expected output: top returned segments and their recommended message direction.
-In no-LLM mode, messages come from configured intervention descriptions. In mock
-or DeepSeek mode, messages come from the LLM helper layer.
+In no-LLM mode, messages come from configured intervention descriptions.
+In mock or DeepSeek mode, messages come from the LLM helper layer.
 
 ### Step 11: Save A Result
 
@@ -745,8 +1454,7 @@ $result | ConvertTo-Json -Depth 20 |
   Set-Content "zevup_scotland_compare_result.json" -Encoding UTF8
 ```
 
-Expected output: a local JSON file named
-`zevup_scotland_compare_result.json`.
+Expected output: a local JSON file named `zevup_scotland_compare_result.json`.
 
 ## Direct Python Checks Without Starting The Server
 
@@ -841,9 +1549,9 @@ Be careful with wording:
 
 ### Missing Source Files
 
-Run Step 2. If any path starts with `MISS`, the simulator cannot build the
-Scotland segment table. Restore the missing cleaned census or Study 3 output
-files first.
+Run Step 2.
+If any path starts with `MISS`, the simulator cannot build the Scotland segment table.
+Restore the missing cleaned census or Study 3 output files first.
 
 ### DeepSeek Live Mode Does Not Run
 
@@ -865,8 +1573,7 @@ $env:DEEPSEEK_MODEL
 [bool]$env:DEEPSEEK_API_KEY
 ```
 
-If the API key is not set, live mode will return `llm_status = "fallback"` and
-use configured defaults.
+If the API key is not set, live mode will return `llm_status = "fallback"` and use configured defaults.
 
 ### API Call Fails With `127.0.0.1:9`
 
@@ -898,8 +1605,7 @@ Check `llm_status`.
 - `fallback` means DeepSeek did not run and defaults were used.
 - `used` means DeepSeek returned structured effects and messages.
 
-For more detailed messages, use live DeepSeek mode with a valid API key and a
-small `segment_limit` first.
+For more detailed messages, use live DeepSeek mode with a valid API key and a small `segment_limit` first.
 
 ## Recommended Workflow
 
@@ -909,6 +1615,6 @@ Use this order:
 2. Run mock mode with `use_llm = $true` to verify the LLM-shaped path.
 3. Run live DeepSeek mode for a small `segment_limit`, such as 5 or 10.
 4. Compare `llm_status`, `overall_uplift`, `demographic_rankings`, and
-   `segment_results`.
+`segment_results`.
 5. Save JSON outputs for reproducibility.
 6. Report results with the caveats above.

@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "base": 0.65,
+  "bounds": [0.4, 0.95],
+  "age_group_adjustments": {
+    "16_to_24": 0.02,
+    "25_to_34": 0.02,
+    "35_to_49": 0.01,
+    "50_to_64": 0.0,
+    "65_plus": -0.01
+  },
+  "education_group_adjustments": {
+    "no_qualifications": -0.02,
+    "lower_school": -0.01,
+    "upper_school": 0.0,
+    "apprenticeship": 0.005,
+    "further_or_subdegree": 0.01,
+    "degree_or_above": 0.02
+  },
+  "socioeconomic_group_adjustments": {
+    "managerial_professional": 0.01,
+    "intermediate": 0.0,
+    "routine_manual": -0.015,
+    "other": -0.02
+  },
+  "household_adjustments": {
+    "accommodation": {
+      "whole_house": 0.01,
+      "flat": -0.02,
+      "other": -0.01
+    },
+    "car_ownership": {
+      "zero": -0.02,
+      "one": 0.0,
+      "two_plus": 0.01
+    },
+    "tenure": {
+      "owned": 0.01,
+      "private_rented": -0.005,
+      "social_rented": -0.01,
+      "unknown": 0.0
+    }
+  }
+}
+

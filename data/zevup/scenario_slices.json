@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "supported_slices": [
+    {
+      "scenario": "neutral_lr_central",
+      "year": 2025,
+      "household_feasibility_path": "output/microsimulation/household_feasibility.parquet",
+      "status": "available"
+    },
+    {
+      "scenario": "steep_lr_high",
+      "year": 2040,
+      "household_feasibility_path": "output/microsimulation/scenarios/steep_lr_high_2040/household_feasibility.parquet",
+      "status": "requires_generation"
+    }
+  ]
+}
+
