@@ -77,6 +77,35 @@ The simulator is a pipeline:
 The important point: **the same API route is used for no-LLM, mock, and live DeepSeek runs**.
 The difference is the environment mode and, optionally, the `use_llm` request flag.
 
+## Vehicle Specification
+
+The ZEV-UP vehicle specification used by this guide follows
+`../../paper/Vehicle_Requirements.md`.
+The guide should treat the configured Oransim vehicle concepts as CM1-CM3
+vehicles rather than generic L7e placeholders.
+
+| Concept | Body and use case | Base vehicle price |
+|---|---|---:|
+| CM1 | 2 seater, short wheelbase, passenger | 8.500 EUR |
+| CM2 | 4 seater, long wheelbase, passenger | 10.500 EUR |
+| CM3 | 2 seater, long wheelbase, commercial | 10.000 EUR |
+
+The base vehicle price includes approximately 20% average local taxes and
+excludes the battery pack.
+
+| Battery pack | Added price |
+|---|---:|
+| Entry level battery pack <7.0 kWh | +3.000 EUR |
+| Entry level battery pack <11.0 kWh | +4.000 EUR |
+
+The concept-to-simulator mapping is:
+
+| Simulator concept id | Vehicle requirements concept | Battery assumption |
+|---|---|---|
+| `zevup_l7e_passenger_2_seat` | CM1 | <7.0 kWh entry battery pack |
+| `zevup_l7e_passenger_4_seat` | CM2 | <11.0 kWh entry battery pack |
+| `zevup_l7e_commercial_2_seat` | CM3 | <11.0 kWh entry battery pack |
+
 ## From Places To Households To People
 
 The persona extension links the three Study 3 layers without changing their scientific boundary:
@@ -758,7 +787,7 @@ Those numbers mean:
 | Part | File | Depends on | Purpose | Output |
 |---|---|---|---|---|
 | Market config | `data/zevup/markets.json` | source file paths | Defines supported market, currently Scotland | `ZEVUPMarket` |
-| Vehicle config | `data/zevup/vehicle_concepts.json` | none | Defines ZEV-UP vehicle variants | `ZEVUPVehicleConcept` |
+| Vehicle config | `data/zevup/vehicle_concepts.json` | `../../paper/Vehicle_Requirements.md` | Defines CM1-CM3 ZEV-UP vehicle variants | `ZEVUPVehicleConcept` |
 | Intervention config | `data/zevup/interventions.json` | none | Defines allowed interventions and default effects | `ZEVUPIntervention` |
 | WP map | `data/zevup/wp_output_map.json` | ZEV-UP work packages | Documents WP1/WP5/WP6 output purpose | WP-facing labels |
 | Static loader | `backend/oransim/data/zevup_static.py` | JSON config files | Loads and validates static config | lookup functions |
